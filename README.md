@@ -29,8 +29,9 @@ Anti-« bégaiement » : hystérésis (3 dB en HARD, 6 dB en SOFT) + temps de ma
 
 ## Interface
 
-- Fenêtre ouverte par défaut à **60 % (default)**, impossible de la réduire en dessous, proportions bloquées, jusqu'à 150 % : **mêmes réglages de taille qu'Echoflex**.
-- **Clic droit** : taille (60 % (default) / 75 % / 100 %), presets d'usine, presets utilisateur 1 à 9 (charger / sauvegarder), LEARN, mode Soft/Hard, Guitar/Bass, **Range** (coupure totale / −40 dB / −20 dB quand le gate est fermé), table MIDI.
+- Fenêtre ouverte par défaut à **60 %**, impossible de la réduire en dessous, proportions bloquées, jusqu'à 150 % : **mêmes réglages de taille qu'Echoflex**.
+- **Clic droit > Plugin size** : 60 % / 75 % / 100 % pour cette fenêtre (« (default) » marque la taille par défaut choisie), et *Default size (new windows)* pour choisir la taille d'ouverture de toutes les nouvelles fenêtres de NGATE (réglage enregistré dans `Studio Wiga/Ngate/settings.xml` du dossier de données de l'utilisateur, comme Octopus).
+- **Clic droit** : taille (*Plugin size*), presets d'usine, presets utilisateur 1 à 9 (charger / sauvegarder), LEARN, mode Soft/Hard, Guitar/Bass, **Range** (coupure totale / −40 dB / −20 dB quand le gate est fermé), table MIDI.
 - Potard en aluminium brossé qui tourne vraiment : la matière du chapeau (rayures, taches, usure : `knob_light.png` / `knob_dark.png`) et la rainure du repère tournent autour du centre réel du chapeau, tandis que les reflets coniques de l'usinage restent fixes sous la lumière, comme sur un vrai potard.
 - Mini-inverseur SOFT/HARD animé : le levier de la photo (`lever.png`) bascule (sa projection raccourcit puis repart de l'autre côté), avec son ombre portée.
 - Boutons LEARN et BASS : enfoncement au clic, couronne orange quand actifs.
@@ -86,3 +87,7 @@ En **premier** dans la chaîne, avant les autres plugins Studio Wiga et avant Ge
 - v1.3.1 : menu de taille de fenêtre : « 60 % (default) », 75 %, 100 % (plus de taille en pixels)
 
 - v1.4.0 : MIDI Learn au clic droit sur chaque commande (Clear MIDI, assignations sauvegardées avec le projet)
+
+## Nouveautés v1.5
+
+- v1.5.0 : clic droit > *Plugin size* > *Default size (new windows)* : taille par défaut des nouvelles fenêtres au choix (60 / 75 / 100 %), comme dans Octopus

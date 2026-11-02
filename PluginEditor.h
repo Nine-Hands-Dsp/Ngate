@@ -129,6 +129,8 @@ private:
     void addMidiMenu (juce::PopupMenu& menu, int learnIdx);
     void handleMidiMenu (int r);
     void setScaledHeight (int h);
+    static constexpr int numSizes = 3;          // 60 % (defaut d'origine) / 75 % / 100 %
+    static int sizeHeight (int idx);
     void setParamValue (const char* id, float plain);
     void toggleParam (const char* id);
     void showStatus();
