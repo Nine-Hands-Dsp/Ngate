@@ -39,19 +39,21 @@ Anti-« bégaiement » : hystérésis (3 dB en HARD, 6 dB en SOFT) + temps de ma
 
 ## MIDI
 
-| Message | Fonction |
+Aucun CC assigné par défaut : clic droit > MIDI > Learn.
+
+| Commande MIDI Learn | Fonction |
 |---|---|
-| CC 20 | Threshold (0 = −95 dB, 127 = 0 dB) |
-| CC 21 | Soft / Hard (≥ 64 Hard) |
-| CC 22 | Guitar / Bass (≥ 64 Bass) |
-| CC 23 | LEARN (chaque appui) |
-| CC 24 | Footswitch (≥ 64 ON, < 64 OFF) |
-| CC 25 | Footswitch bascule (chaque appui) |
+| Threshold | 0 = −95 dB, 127 = 0 dB |
+| Soft / Hard | ≥ 64 Hard |
+| Bass | Guitar / Bass (≥ 64 Bass) |
+| LEARN button | LEARN (chaque appui) |
+| Footswitch | ≥ 64 ON, < 64 OFF |
+| Footswitch toggle | bascule à chaque appui |
 | Program Change 1-10 | Presets d'usine |
 
-Ces numéros sont les assignations par défaut : clic droit sur une commande → « MIDI Learn: … » puis bouger
-la pédale / appuyer sur le footswitch du contrôleur pour la réassigner (« Clear MIDI: … » pour la libérer,
-MIDI → « Reset MIDI to defaults » pour revenir aux CC 20-25). Les assignations sont sauvegardées avec le projet.
+Clic droit sur une commande → « MIDI Learn: … » puis bouger la pédale / appuyer sur le footswitch du
+contrôleur pour l'assigner (« Clear MIDI: … » pour la libérer, MIDI → « Clear all MIDI assignments »
+pour tout effacer). Les assignations sont sauvegardées avec le projet.
 
 Tous les paramètres sont aussi automatisables et assignables en MIDI-learn dans le DAW.
 
@@ -91,3 +93,5 @@ En **premier** dans la chaîne, avant les autres plugins Studio Wiga et avant Ge
 ## Nouveautés v1.5
 
 - v1.5.0 : clic droit > *Plugin size* > *Default size (new windows)* : taille par défaut des nouvelles fenêtres au choix (60 / 75 / 100 %), comme dans Octopus
+
+- v1.5.1 : plus aucun CC MIDI assigné par défaut (tout passe par le MIDI Learn)

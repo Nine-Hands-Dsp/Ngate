@@ -963,7 +963,7 @@ void NgateAudioProcessorEditor::showContextMenu (int learnIdx)
     }
     midi.addSeparator();
     if (proc.learnTarget.load() >= 0) midi.addItem (1200, "Cancel MIDI learn");
-    midi.addItem (1201, "Reset MIDI to defaults (CC 20-25)");
+    midi.addItem (1201, "Clear all MIDI assignments");
     midi.addSeparator();
     midi.addItem (906, "Program Change 1-10  Factory presets", false);
     menu.addSubMenu ("MIDI", midi);

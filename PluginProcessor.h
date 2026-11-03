@@ -131,7 +131,9 @@ public:
     std::atomic<int>   learnCounter    { 0 };       // +1 a chaque LEARN termine
     std::atomic<float> learnedNoiseDb  { -120.0f };
 
-    enum MidiMap
+    // v1.5.1 : plus aucun CC assigne par defaut (MIDI Learn uniquement). Ces numeros ne servent plus
+    // qu'a reconnaitre l'ancienne table d'usine (CC 20 a 25) dans les anciens projets pour la vider.
+    enum LegacyMidiMap
     {
         ccThreshold  = 20,
         ccHard       = 21, // >= 64 : HARD, < 64 : SOFT
@@ -141,16 +143,16 @@ public:
         ccFootToggle = 25  // chaque appui (passage >= 64) inverse l'etat
     };
 
-    // v1.4 MIDI Learn : toutes les commandes de la facade ; numeros par defaut = anciens CC fixes 20 a 25
-    // (anciens projets et pedaliers inchanges). Le footswitch garde ses deux CC : a accrochage et bascule.
+    // v1.4 MIDI Learn : toutes les commandes de la facade. Le footswitch a deux assignations : a accrochage et bascule.
+    // legacyCC = ancien numero d'usine (v1.4 a v1.5.0), utilise seulement pour vider l'ancienne table au chargement.
     enum LearnType { learnContinuous, learnToggle, learnTrigger, learnFootswitch, learnFootToggle };
-    struct LearnDef { const char* id; const char* name; int defaultCC; int type; };
+    struct LearnDef { const char* id; const char* name; int legacyCC; int type; };
     static constexpr int numLearn = 6;
     static const LearnDef& learnDef (int i);
     std::atomic<int> ccMap[numLearn];            // numero de CC de chaque commande, -1 = non assigne
     std::atomic<int> learnTarget { -1 };         // commande en attente d'un CC (-1 = pas de learn)
     std::atomic<int> lastLearned { -1 };         // derniere commande apprise (lue et remise a -1 par la fenetre)
-    void resetMidiMap();
+    void resetMidiMap();                         // efface toutes les assignations (aucun CC par defaut)
 
 private:
     void handleMidi (juce::MidiBuffer& midi);

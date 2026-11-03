@@ -183,7 +183,7 @@ static const char* const learnKey[NgateAudioProcessor::numLearn] = { "threshold"
 
 void NgateAudioProcessor::resetMidiMap()
 {
-    for (int i = 0; i < numLearn; ++i) ccMap[i].store (learnDef (i).defaultCC);
+    for (int i = 0; i < numLearn; ++i) ccMap[i].store (-1);
 }
 
 void NgateAudioProcessor::handleMidi (juce::MidiBuffer& midi)
@@ -536,9 +536,17 @@ void NgateAudioProcessor::setStateInformation (const void* data, int sizeInBytes
         {
             auto state = juce::ValueTree::fromXml (*xml);
             currentPreset = (int) state.getProperty ("currentPreset", 0);
-            // assignations MIDI Learn (ancien projet sans ces proprietes : numeros par defaut 20 a 25)
+            // assignations MIDI Learn (ancien projet sans ces proprietes : non assignees)
+            bool factory = true;
             for (int i = 0; i < numLearn; ++i)
-                ccMap[i].store (juce::jlimit (-1, 127, (int) state.getProperty (juce::String ("cc_") + learnKey[i], learnDef (i).defaultCC)));
+            {
+                const auto key = juce::String ("cc_") + learnKey[i];
+                if (! state.hasProperty (key)) { factory = false; break; }
+                if ((int) state.getProperty (key) != learnDef (i).legacyCC) factory = false;
+            }
+            // v1.5.1 : ancienne table d'usine intacte (CC 20 a 25) = jamais modifiee : on la vide
+            for (int i = 0; i < numLearn; ++i)
+                ccMap[i].store (factory ? -1 : juce::jlimit (-1, 127, (int) state.getProperty (juce::String ("cc_") + learnKey[i], -1)));
             apvts.replaceState (state);
         }
     }
