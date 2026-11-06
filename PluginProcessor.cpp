@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "NineHandsFolder.h"
 #include "PluginEditor.h"
 #include <cstring>
 
@@ -125,7 +126,7 @@ void NgateAudioProcessor::setParam (const juce::String& id, float plainValue)
         p->setValueNotifyingHost (p->convertTo0to1 (plainValue));
 }
 
-// Anti-gel v2 (Studio Wiga) : jamais d'appel a l'hote (setValueNotifyingHost) depuis le thread audio.
+// Anti-gel v2 (NINE HANDS | DSP) : jamais d'appel a l'hote (setValueNotifyingHost) depuis le thread audio.
 // Le MIDI et la fin du LEARN mettent la valeur en file ; un timer du thread de messages la transmet au DAW.
 const char* NgateAudioProcessor::queuedId (int i)
 {
@@ -437,7 +438,7 @@ void NgateAudioProcessor::applyFactoryPreset (int index)
 juce::File NgateAudioProcessor::getUserPresetFile()
 {
     return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-             .getChildFile ("Studio Wiga")
+             .getChildFile (nhd::folderName())
              .getChildFile ("Ngate")
              .getChildFile ("UserPresets.xml");
 }

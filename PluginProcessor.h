@@ -5,7 +5,7 @@
 #include <atomic>
 
 //==============================================================================
-// NGATE (Studio Wiga) — noise gate au format pedale simple (guitare et basse).
+// NGATE (NINE HANDS | DSP) — noise gate au format pedale simple (guitare et basse).
 // THRESHOLD -95 a 0 dB, bouton LEARN (mesure du bruit de fond), SOFT / HARD,
 // mode BASS, LED OPEN / GATE, footswitch. Voir README.md.
 //==============================================================================

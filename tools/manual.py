@@ -1,4 +1,4 @@
-# NGATE (Studio Wiga) - notice PDF bilingue (anglais puis francais), illustree avec le rendu reel du plugin.
+# NGATE (NINE HANDS | DSP) - notice PDF bilingue (anglais puis francais), illustree avec le rendu reel du plugin.
 # Usage : python3 tools/manual.py <fichier PDF de sortie>
 # Images : tools/manual_assets/ (captures reprises de la notice v1.4.0, toujours justes : facade, etats, courbe ;
 # aucune capture de menu). Polices : assets/fonts (Poppins).
@@ -68,7 +68,7 @@ T = {
  inst_t="2. Installation",
  inst=["<b>Windows</b>: copy <b>Ngate.vst3</b> into <b>C:\\Program Files\\Common Files\\VST3\\</b>.",
        "<b>macOS</b> (universal binary): unzip, then copy <b>Ngate.vst3</b> into <b>~/Library/Audio/Plug-Ins/VST3/</b>. If macOS blocks it, run once in Terminal: <b>xattr -cr ~/Library/Audio/Plug-Ins/VST3/Ngate.vst3</b>.",
-       "<b>Reaper</b>: Options &gt; Preferences &gt; Plug-ins &gt; VST &gt; Re-scan. The plug-in appears as <b>Ngate (Studio Wiga)</b>."],
+       "<b>Reaper</b>: Options &gt; Preferences &gt; Plug-ins &gt; VST &gt; Re-scan. The plug-in appears as <b>Ngate (NINE HANDS | DSP)</b>."],
  ov_t="3. The interface",
  ov_cap="Numbers refer to the table below and to sections 4 and 5.",
  ov_hdr=["No.", "Element", "Function"],
@@ -118,7 +118,7 @@ T = {
      ["Program Change 1-10", "Factory presets 1 to 10 (program 0 = preset 1); always active, nothing to learn."]],
  win_t="7. Window",
  win=["NGATE opens at <b>60 %</b>, the same sizes as Echoflex, and the window can never be made smaller than 60 %. Right-click &gt; <b>Plugin size</b>: <b>60 %</b>, <b>75 %</b> or <b>100 %</b> resizes this window, with <b>(default)</b> shown next to the default size you chose.",
-      "At the bottom of the same menu, <b>Default size (new windows)</b> chooses the size at which every new NGATE window opens (a setting shared by all instances and saved on the computer, in Studio Wiga/Ngate/settings.xml of your user data folder); the open window takes that size at once. NGATE does not store a size in the project: every window, new or reopened, opens at the default size. Drag the bottom-right corner to enlarge it further (aspect ratio locked, up to 150 %)."],
+      "At the bottom of the same menu, <b>Default size (new windows)</b> chooses the size at which every new NGATE window opens (a setting shared by all instances and saved on the computer, in NINE HANDS | DSP/Ngate/settings.xml of your user data folder); the open window takes that size at once. NGATE does not store a size in the project: every window, new or reopened, opens at the default size. Drag the bottom-right corner to enlarge it further (aspect ratio locked, up to 150 %)."],
  rc_hdr=["Right-click entry", "Content"],
  rc=[["MIDI Learn (on a control)", "MIDI Learn / Clear MIDI / Cancel MIDI learn"],
      ["Plugin size", "60 % · 75 % · 100 % (“(default)” next to the default size) · Default size (new windows)"],
@@ -127,7 +127,7 @@ T = {
      ["Gate mode / Instrument", "Soft / Hard · Guitar / Bass"], ["Range (closed gate)", "Full mute · -40 dB · -20 dB"],
      ["MIDI", "Learn x6 · Cancel MIDI learn · Clear all MIDI assignments · Program Change 1-10 (reminder)"]],
  pre_t="8. Presets",
- pre="10 factory presets (right-click &gt; Factory presets, the DAW preset menu, or Program Change). 9 user presets (Load / Save user preset) are shared by all instances (%APPDATA%\\Studio Wiga\\Ngate\\UserPresets.xml / ~/Library/Application Support/Studio Wiga/Ngate/).",
+ pre="10 factory presets (right-click &gt; Factory presets, the DAW preset menu, or Program Change). 9 user presets (Load / Save user preset) are shared by all instances (%APPDATA%\\NINE HANDS | DSP\\Ngate\\UserPresets.xml / ~/Library/Application Support/NINE HANDS | DSP/Ngate/).",
  pre_hdr=["Preset", "Thresh.", "Mode", "Instr.", "Range", "Use"],
  presets=[["1. Clean Single Coils", "-66 dB", "Soft", "Guitar", "Full", "Single coils in clean: keeps the tails."],
           ["2. Crunch Humbuckers", "-58 dB", "Soft", "Guitar", "Full", "Crunch with humbuckers."],
@@ -140,7 +140,7 @@ T = {
           ["9. Bass Drive", "-55 dB", "Hard", "Bass", "Full", "Overdriven bass, tight."],
           ["10. Studio Silence", "-78 dB", "Hard", "Guitar", "Full", "Silent background for recording."]],
  tips_t="9. Tips",
- tips=["Put NGATE <b>first</b> in the Reaper chain, before the other Studio Wiga plug-ins and before Two Notes Genome: it removes the guitar's noise before it gets amplified.",
+ tips=["Put NGATE <b>first</b> in the Reaper chain, before the other NINE HANDS | DSP plug-ins and before Two Notes Genome: it removes the guitar's noise before it gets amplified.",
        "For very high gain, a second NGATE in HARD <b>after</b> the distortion (still before Genome) tightens the silences even more.",
        "Low-tuned 7-string (drop G...) or bass: switch BASS on so long low notes are not chopped, and run LEARN with the strings muted at playing volume.",
        "Learn the LEARN button on a spare footswitch of your controller: one press between songs re-measures the noise floor when you change guitar or amp channel."],
@@ -164,7 +164,7 @@ T = {
  inst_t="2. Installation",
  inst=["<b>Windows</b> : copiez <b>Ngate.vst3</b> dans <b>C:\\Program Files\\Common Files\\VST3\\</b>.",
        "<b>macOS</b> (binaire universel) : dézippez puis copiez <b>Ngate.vst3</b> dans <b>~/Library/Audio/Plug-Ins/VST3/</b>. Si macOS le bloque, lancez une fois dans le Terminal : <b>xattr -cr ~/Library/Audio/Plug-Ins/VST3/Ngate.vst3</b>.",
-       "<b>Reaper</b> : Options &gt; Préférences &gt; Plug-ins &gt; VST &gt; Re-scan. Le plugin apparaît sous le nom <b>Ngate (Studio Wiga)</b>."],
+       "<b>Reaper</b> : Options &gt; Préférences &gt; Plug-ins &gt; VST &gt; Re-scan. Le plugin apparaît sous le nom <b>Ngate (NINE HANDS | DSP)</b>."],
  ov_t="3. L'interface",
  ov_cap="Les numéros renvoient au tableau ci-dessous et aux sections 4 et 5.",
  ov_hdr=["N°", "Élément", "Fonction"],
@@ -214,7 +214,7 @@ T = {
      ["Program Change 1-10", "Presets d'usine 1 à 10 (programme 0 = preset 1) ; toujours actif, rien à apprendre."]],
  win_t="7. Fenêtre",
  win=["NGATE s'ouvre à <b>60 %</b>, avec les mêmes tailles qu'Echoflex, et la fenêtre ne peut jamais être plus petite que 60 %. Clic droit &gt; <b>Plugin size</b> : <b>60 %</b>, <b>75 %</b> ou <b>100 %</b> redimensionne cette fenêtre, et <b>(default)</b> est indiqué à côté de la taille par défaut choisie.",
-      "En bas du même menu, <b>Default size (new windows)</b> choisit la taille d'ouverture de toutes les nouvelles fenêtres de NGATE (réglage commun à toutes les instances, enregistré sur l'ordinateur, dans Studio Wiga/Ngate/settings.xml du dossier de données de l'utilisateur) ; la fenêtre ouverte prend aussitôt cette taille. NGATE n'enregistre pas de taille dans le projet : chaque fenêtre, nouvelle ou rouverte, s'ouvre à la taille par défaut. Tirez le coin inférieur droit pour l'agrandir davantage (proportions bloquées, jusqu'à 150 %)."],
+      "En bas du même menu, <b>Default size (new windows)</b> choisit la taille d'ouverture de toutes les nouvelles fenêtres de NGATE (réglage commun à toutes les instances, enregistré sur l'ordinateur, dans NINE HANDS | DSP/Ngate/settings.xml du dossier de données de l'utilisateur) ; la fenêtre ouverte prend aussitôt cette taille. NGATE n'enregistre pas de taille dans le projet : chaque fenêtre, nouvelle ou rouverte, s'ouvre à la taille par défaut. Tirez le coin inférieur droit pour l'agrandir davantage (proportions bloquées, jusqu'à 150 %)."],
  rc_hdr=["Entrée du clic droit", "Contenu"],
  rc=[["MIDI Learn (sur une commande)", "MIDI Learn / Clear MIDI / Cancel MIDI learn"],
      ["Plugin size", "60 % · 75 % · 100 % (« (default) » à côté de la taille par défaut) · Default size (new windows)"],
@@ -223,7 +223,7 @@ T = {
      ["Gate mode / Instrument", "Soft / Hard · Guitar / Bass"], ["Range (closed gate)", "Full mute · -40 dB · -20 dB"],
      ["MIDI", "Learn x6 · Cancel MIDI learn · Clear all MIDI assignments · Program Change 1-10 (rappel)"]],
  pre_t="8. Presets",
- pre="10 presets d'usine (clic droit &gt; Factory presets, menu des presets du DAW, ou Program Change). 9 presets utilisateur (Load / Save user preset) communs à toutes les instances (%APPDATA%\\Studio Wiga\\Ngate\\UserPresets.xml / ~/Library/Application Support/Studio Wiga/Ngate/).",
+ pre="10 presets d'usine (clic droit &gt; Factory presets, menu des presets du DAW, ou Program Change). 9 presets utilisateur (Load / Save user preset) communs à toutes les instances (%APPDATA%\\NINE HANDS | DSP\\Ngate\\UserPresets.xml / ~/Library/Application Support/NINE HANDS | DSP/Ngate/).",
  pre_hdr=["Preset", "Seuil", "Mode", "Instr.", "Range", "Usage"],
  presets=[["1. Clean Single Coils", "-66 dB", "Soft", "Guitare", "Totale", "Simples en son clair : garde les fins de notes."],
           ["2. Crunch Humbuckers", "-58 dB", "Soft", "Guitare", "Totale", "Crunch avec humbuckers."],
@@ -236,7 +236,7 @@ T = {
           ["9. Bass Drive", "-55 dB", "Hard", "Basse", "Totale", "Basse saturée, serrée."],
           ["10. Studio Silence", "-78 dB", "Hard", "Guitare", "Totale", "Fond silencieux pour l'enregistrement."]],
  tips_t="9. Conseils",
- tips=["Placez NGATE <b>en premier</b> dans la chaîne Reaper, avant les autres plugins Studio Wiga et avant Two Notes Genome : il coupe le bruit de la guitare avant qu'il soit amplifié.",
+ tips=["Placez NGATE <b>en premier</b> dans la chaîne Reaper, avant les autres plugins NINE HANDS | DSP et avant Two Notes Genome : il coupe le bruit de la guitare avant qu'il soit amplifié.",
        "Pour un son très saturé, un deuxième NGATE en HARD <b>après</b> la distorsion (toujours avant Genome) resserre encore les silences.",
        "7 cordes accordée grave (drop G...) ou basse : activez BASS pour ne pas hacher les notes graves longues, et lancez LEARN cordes étouffées au volume de jeu.",
        "Apprenez le bouton LEARN sur un footswitch libre du contrôleur : un appui entre deux morceaux remesure le bruit de fond quand vous changez de guitare ou de canal d'ampli."],
@@ -300,7 +300,7 @@ def deco(c, doc):
     c.saveState()
     c.setFillColor(ACC); c.rect(0, A4[1] - 2.5 * mm, A4[0], 2.5 * mm, stroke=0, fill=1)
     c.setFont("Pop", 7.5); c.setFillColor(GREY)
-    c.drawString(18 * mm, 10 * mm, "NGATE " + VERSION + " · Studio Wiga")
+    c.drawString(18 * mm, 10 * mm, "NGATE " + VERSION + " · NINE HANDS | DSP")
     c.drawRightString(A4[0] - 18 * mm, 10 * mm, str(doc.page))
     c.restoreState()
 
@@ -309,7 +309,7 @@ def cover_bg(c, doc):
     c.setFillColor(ACC); c.rect(0, A4[1] - 3 * mm, A4[0], 3 * mm, stroke=0, fill=1); c.restoreState()
 
 doc = BaseDocTemplate(OUT, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm, bottomMargin=18 * mm,
-                      title="NGATE - User manual / Notice v" + VERSION, author="Studio Wiga")
+                      title="NGATE - User manual / Notice v" + VERSION, author="NINE HANDS | DSP")
 doc.addPageTemplates([PageTemplate(id="cover", frames=[Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="fc")], onPage=cover_bg),
                       PageTemplate(id="p", frames=[Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="f")], onPage=deco)])
 en = section("en"); fr = section("fr")

@@ -1,8 +1,8 @@
-# Ngate (Studio Wiga) — VST3
+# Ngate (NINE HANDS | DSP) — VST3
 
 Noise gate au **format pédale simple** (même gabarit de fenêtre qu'Echoflex), pour guitare et basse, Windows 11 et macOS.
 Inspiré du principe des pédales noise gate à gros potard THRESHOLD + bouton LEARN (type NG-1). Usage personnel.
-Visuel NGATE (photo) de Studio Wiga mis à l'échelle du projet (1520 × 1916, pédale à la même taille qu'Echoflex) : fond noir uni, seulement les embases jack femelles de chaque côté (sans fiches), 4 vis (haut et bas).
+Visuel NGATE (photo) de NINE HANDS | DSP mis à l'échelle du projet (1520 × 1916, pédale à la même taille qu'Echoflex) : fond noir uni, seulement les embases jack femelles de chaque côté (sans fiches), 4 vis (haut et bas).
 
 ## Installation via GitHub
 
@@ -11,7 +11,7 @@ Visuel NGATE (photo) de Studio Wiga mis à l'échelle du projet (1520 × 1916, p
 3. Télécharger l'artefact :
    - **Windows** : copier `Ngate.vst3` dans `C:\Program Files\Common Files\VST3\`
    - **macOS** : dézipper puis copier `Ngate.vst3` dans `~/Library/Audio/Plug-Ins/VST3/`
-4. Relancer l'analyse des plugins dans le DAW. Le plugin apparaît comme **Ngate (Studio Wiga)**.
+4. Relancer l'analyse des plugins dans le DAW. Le plugin apparaît comme **Ngate (NINE HANDS | DSP)**.
 
 ## Commandes
 
@@ -30,7 +30,7 @@ Anti-« bégaiement » : hystérésis (3 dB en HARD, 6 dB en SOFT) + temps de ma
 ## Interface
 
 - Fenêtre ouverte par défaut à **60 %**, impossible de la réduire en dessous, proportions bloquées, jusqu'à 150 % : **mêmes réglages de taille qu'Echoflex**.
-- **Clic droit > Plugin size** : 60 % / 75 % / 100 % pour cette fenêtre (« (default) » marque la taille par défaut choisie), et *Default size (new windows)* pour choisir la taille d'ouverture de toutes les nouvelles fenêtres de NGATE (réglage enregistré dans `Studio Wiga/Ngate/settings.xml` du dossier de données de l'utilisateur, comme Octopus).
+- **Clic droit > Plugin size** : 60 % / 75 % / 100 % pour cette fenêtre (« (default) » marque la taille par défaut choisie), et *Default size (new windows)* pour choisir la taille d'ouverture de toutes les nouvelles fenêtres de NGATE (réglage enregistré dans `NINE HANDS | DSP/Ngate/settings.xml` du dossier de données de l'utilisateur, comme Octopus).
 - **Clic droit** : taille (*Plugin size*), presets d'usine, presets utilisateur 1 à 9 (charger / sauvegarder), LEARN, mode Soft/Hard, Guitar/Bass, **Range** (coupure totale / −40 dB / −20 dB quand le gate est fermé), table MIDI.
 - Potard en aluminium brossé qui tourne vraiment : la matière du chapeau (rayures, taches, usure : `knob_light.png` / `knob_dark.png`) et la rainure du repère tournent autour du centre réel du chapeau, tandis que les reflets coniques de l'usinage restent fixes sous la lumière, comme sur un vrai potard.
 - Mini-inverseur SOFT/HARD animé : le levier de la photo (`lever.png`) bascule (sa projection raccourcit puis repart de l'autre côté), avec son ombre portée.
@@ -63,7 +63,7 @@ Tous les paramètres sont aussi automatisables et assignables en MIDI-learn dans
 
 ## Placement dans Reaper
 
-En **premier** dans la chaîne, avant les autres plugins Studio Wiga et avant Genome : le gate coupe le bruit de la guitare avant qu'il soit amplifié. Pour un son très saturé, un deuxième Ngate en HARD **après** la distorsion (et avant Genome) resserre encore les silences. Le gate est mono-commandé : les deux voies stéréo sont toujours coupées ensemble.
+En **premier** dans la chaîne, avant les autres plugins NINE HANDS | DSP et avant Genome : le gate coupe le bruit de la guitare avant qu'il soit amplifié. Pour un son très saturé, un deuxième Ngate en HARD **après** la distorsion (et avant Genome) resserre encore les silences. Le gate est mono-commandé : les deux voies stéréo sont toujours coupées ensemble.
 
 ## Changer le visuel ou le nom
 
