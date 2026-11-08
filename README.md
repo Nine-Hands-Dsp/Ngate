@@ -63,7 +63,7 @@ Tous les paramètres sont aussi automatisables et assignables en MIDI-learn dans
 
 ## Placement dans Reaper
 
-En **premier** dans la chaîne, avant les autres plugins NINE HANDS | DSP et avant Genome : le gate coupe le bruit de la guitare avant qu'il soit amplifié. Pour un son très saturé, un deuxième Ngate en HARD **après** la distorsion (et avant Genome) resserre encore les silences. Le gate est mono-commandé : les deux voies stéréo sont toujours coupées ensemble.
+En **premier** dans la chaîne, avant les autres plugins NINE HANDS | DSP et avant Ampire : le gate coupe le bruit de la guitare avant qu'il soit amplifié. Pour un son très saturé, un deuxième Ngate en HARD **après** la distorsion (et avant Ampire) resserre encore les silences. Le gate est mono-commandé : les deux voies stéréo sont toujours coupées ensemble.
 
 ## Changer le visuel ou le nom
 

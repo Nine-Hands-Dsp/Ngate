@@ -16,8 +16,8 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "docs", "NGATE_Manual_EN-FR_v1.5.1.pdf")
-VERSION = "1.5.1"
+OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "docs", "NGATE_Manual_EN-FR_v1.5.2.pdf")
+VERSION = "1.5.2"
 FONTS = os.path.join(ROOT, "assets", "fonts")
 A = os.path.join(ROOT, "tools", "manual_assets")
 
@@ -140,8 +140,8 @@ T = {
           ["9. Bass Drive", "-55 dB", "Hard", "Bass", "Full", "Overdriven bass, tight."],
           ["10. Studio Silence", "-78 dB", "Hard", "Guitar", "Full", "Silent background for recording."]],
  tips_t="9. Tips",
- tips=["Put NGATE <b>first</b> in the Reaper chain, before the other NINE HANDS | DSP plug-ins and before Two Notes Genome: it removes the guitar's noise before it gets amplified.",
-       "For very high gain, a second NGATE in HARD <b>after</b> the distortion (still before Genome) tightens the silences even more.",
+ tips=["Put NGATE <b>first</b> in the Reaper chain, before the other NINE HANDS | DSP plug-ins and before Ampire: it removes the guitar's noise before it gets amplified.",
+       "For very high gain, a second NGATE in HARD <b>after</b> the distortion (still before Ampire) tightens the silences even more.",
        "Low-tuned 7-string (drop G...) or bass: switch BASS on so long low notes are not chopped, and run LEARN with the strings muted at playing volume.",
        "Learn the LEARN button on a spare footswitch of your controller: one press between songs re-measures the noise floor when you change guitar or amp channel."],
  tech_t="10. Specifications",
@@ -236,8 +236,8 @@ T = {
           ["9. Bass Drive", "-55 dB", "Hard", "Basse", "Totale", "Basse saturée, serrée."],
           ["10. Studio Silence", "-78 dB", "Hard", "Guitare", "Totale", "Fond silencieux pour l'enregistrement."]],
  tips_t="9. Conseils",
- tips=["Placez NGATE <b>en premier</b> dans la chaîne Reaper, avant les autres plugins NINE HANDS | DSP et avant Two Notes Genome : il coupe le bruit de la guitare avant qu'il soit amplifié.",
-       "Pour un son très saturé, un deuxième NGATE en HARD <b>après</b> la distorsion (toujours avant Genome) resserre encore les silences.",
+ tips=["Placez NGATE <b>en premier</b> dans la chaîne Reaper, avant les autres plugins NINE HANDS | DSP et avant Ampire : il coupe le bruit de la guitare avant qu'il soit amplifié.",
+       "Pour un son très saturé, un deuxième NGATE en HARD <b>après</b> la distorsion (toujours avant Ampire) resserre encore les silences.",
        "7 cordes accordée grave (drop G...) ou basse : activez BASS pour ne pas hacher les notes graves longues, et lancez LEARN cordes étouffées au volume de jeu.",
        "Apprenez le bouton LEARN sur un footswitch libre du contrôleur : un appui entre deux morceaux remesure le bruit de fond quand vous changez de guitare ou de canal d'ampli."],
  tech_t="10. Caractéristiques techniques",
