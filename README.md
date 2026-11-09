@@ -4,6 +4,13 @@ Noise gate au **format pédale simple** (même gabarit de fenêtre qu'Echoflex),
 Inspiré du principe des pédales noise gate à gros potard THRESHOLD + bouton LEARN (type NG-1). Usage personnel.
 Visuel NGATE (photo) de NINE HANDS | DSP mis à l'échelle du projet (1520 × 1916, pédale à la même taille qu'Echoflex) : fond noir uni, seulement les embases jack femelles de chaque côté (sans fiches), 4 vis (haut et bas).
 
+<p align="center">
+  <a href="https://github.com/Nine-Hands-Dsp/Ngate/releases/latest/download/Ngate-VST3-Windows.zip"><img alt="Télécharger pour Windows" src="https://img.shields.io/badge/%E2%AC%87%20T%C3%A9l%C3%A9charger-Windows-0078D6?style=for-the-badge"></a>
+  <a href="https://github.com/Nine-Hands-Dsp/Ngate/releases/latest/download/Ngate-VST3-macOS.zip"><img alt="Télécharger pour macOS" src="https://img.shields.io/badge/%E2%AC%87%20T%C3%A9l%C3%A9charger-macOS-111111?style=for-the-badge&logo=apple&logoColor=white"></a>
+  <br>
+  <a href="https://github.com/Nine-Hands-Dsp/Ngate/releases/latest"><img alt="Dernière version" src="https://img.shields.io/github/v/release/Nine-Hands-Dsp/Ngate?label=derni%C3%A8re%20version&color=919496"></a>
+</p>
+
 ## Installation via GitHub
 
 1. Déposer à la racine du dépôt : `background.png`, `lever.png`, `knob_light.png`, `knob_dark.png`, `CMakeLists.txt`, `PluginProcessor.h/.cpp`, `PluginEditor.h/.cpp`, `README.md`, `docs/NGATE_Manual_EN-FR_v1.4.0.pdf` (notice EN puis FR) et le dossier `.github/workflows/build.yml`.
