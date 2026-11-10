@@ -1,318 +1,277 @@
-# NGATE (NINE HANDS | DSP) - notice PDF bilingue (anglais puis francais), illustree avec le rendu reel du plugin.
-# Usage : python3 tools/manual.py <fichier PDF de sortie>
-# Images : tools/manual_assets/ (captures reprises de la notice v1.4.0, toujours justes : facade, etats, courbe ;
-# aucune capture de menu). Polices : assets/fonts (Poppins).
-# Contenu verifie contre PluginEditor.cpp / PluginProcessor.cpp (v1.5.1). Pas d'historique des versions dans le PDF.
-import os, sys
-from PIL import Image
+# NGATE (NINE HANDS | DSP) - notice PDF en francais, illustree avec le rendu reel du plugin (tools/render).
+# Usage : python3 tools/manual.py <dossier des captures (design/renders)> <fichier PDF de sortie>
+import os, sys, json, subprocess
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib.enums import TA_CENTER
 from reportlab.platypus import (BaseDocTemplate, PageTemplate, NextPageTemplate, Frame, Paragraph, Spacer, Image as RLImage,
-                                Table, TableStyle, PageBreak, CondPageBreak, KeepTogether)
+                                Table, TableStyle, PageBreak, KeepTogether)
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "docs", "NGATE_Manual_EN-FR_v1.5.2.pdf")
-VERSION = "1.5.2"
+SHOTS = sys.argv[1]
+OUT = sys.argv[2]
+VERSION = "2.0.0"
+TMP = os.path.join(os.path.dirname(os.path.abspath(OUT)), "_notice_tmp")
+os.makedirs(TMP, exist_ok=True)
 FONTS = os.path.join(ROOT, "assets", "fonts")
-A = os.path.join(ROOT, "tools", "manual_assets")
 
-for n, f in (("Pop", "Poppins-Regular"), ("PopL", "Poppins-Light"), ("PopM", "Poppins-Medium"), ("PopB", "Poppins-Bold")):
+for n, f in (("Pop", "Poppins-Regular"), ("PopL", "Poppins-Light"), ("PopM", "Poppins-Medium"), ("PopB", "Poppins-Bold"),
+             ("Title", "BarlowCondensed-ExtraBold")):
     pdfmetrics.registerFont(TTFont(n, os.path.join(FONTS, f + ".ttf")))
 
-ACC = colors.HexColor("#E88032"); ACC_L = colors.HexColor("#F2A66C")       # orange des LED / de l'afficheur
-DARK = colors.HexColor("#1D1E21"); GREY = colors.HexColor("#646A78"); LIGHT = colors.HexColor("#F6EEE6")
+ACC = colors.HexColor("#EC7A2C"); ACC_L = colors.HexColor("#F6A56C")       # orange de NOISE GATE
+DARK = colors.HexColor("#1C1A18"); GREY = colors.HexColor("#6A645E"); LIGHT = colors.HexColor("#F6EEE6")
 
+# ---------- logo blanc (SVG officiel -> PNG transparent) ----------
+LOGO_PNG = os.path.join(TMP, "nine_hands_logo_blanc.png")
+svg = open(os.path.join(ROOT, "NineHandsLogo.svg")).read()
+def render_logo():
+    try:
+        subprocess.run(["rsvg-convert", "-w", "1200", os.path.join(ROOT, "NineHandsLogo.svg"), "-o", LOGO_PNG], check=True)
+        return
+    except Exception:
+        pass
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        b = p.chromium.launch(); pg = b.new_page(viewport={"width": 1200, "height": 113})
+        pg.set_content("<html><body style='margin:0;background:transparent'>" +
+                       svg.replace("<svg ", "<svg width='1200' height='112.5' preserveAspectRatio='xMidYMid meet' ", 1) + "</body></html>")
+        pg.screenshot(path=LOGO_PNG, omit_background=True, clip={"x": 0, "y": 0, "width": 1200, "height": 113}); b.close()
+render_logo()
+
+# ---------- captures ----------
+def shot(name): return Image.open(os.path.join(SHOTS, name)).convert("RGB")
+src = shot("ngate_open.png")
+k = src.height / 900.0                      # repere du plugin : 603 x 900 unites (fond 1206 x 1800 / 2)
+
+marks = [(1, 303, 395), (2, 98, 290), (3, 368, 62), (4, 556, 150), (5, 360, 506), (6, 169, 604), (7, 436, 604),
+         (8, 248, 684), (9, 82, 713), (10, 386, 792), (11, 40, 330), (12, 563, 330)]
+ann = src.copy(); dr = ImageDraw.Draw(ann)
+fnt = ImageFont.truetype(os.path.join(FONTS, "Poppins-Bold.ttf"), 32)
+for n, x, y in marks:
+    cx, cy, r = x * k, y * k, 25
+    dr.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(255, 255, 255), outline=(236, 122, 44), width=5)
+    dr.text((cx, cy + 1), str(n), font=fnt, fill=(28, 26, 24), anchor="mm")
+annotated = os.path.join(TMP, "ngate_annotated.png"); ann.save(annotated)
+
+def crop_u(im, box): return im.crop(tuple(int(v * k) for v in box))
+gap = 18
+def strip(parts, path):
+    s = Image.new("RGB", (sum(p.width for p in parts) + gap * (len(parts) - 1), max(p.height for p in parts)), (255, 255, 255))
+    x = 0
+    for p in parts: s.paste(p, (x, 0)); x += p.width + gap
+    s.save(path); return path
+
+learn_img = strip([crop_u(shot(n), (372, 22, 562, 232)) for n in ("ngate_open.png", "ngate_learn.png", "ngate_learn_done.png")],
+                  os.path.join(TMP, "ngate_learn_seq.png"))
+tog_img = strip([crop_u(shot(n), (112, 506, 492, 572)) for n in ("anim_2_soft.png", "anim_0_hard.png")], os.path.join(TMP, "ngate_toggle.png"))
+leds_img = strip([crop_u(shot(n), (62, 600, 542, 745)) for n in ("ngate_open.png", "ngate_gate_bass_soft.png", "ngate_bypass.png")],
+                 os.path.join(TMP, "ngate_leds.png"))
+menus_img = os.path.join(SHOTS, "ngate_menus.png")
+
+# ---------- couverture : pedale detouree (canal alpha du fond), reflet au sol, halo orange tres doux ----------
+bg_a = Image.open(os.path.join(ROOT, "background.png")).split()[3].resize(src.size, Image.LANCZOS)
+cut = Image.new("RGBA", src.size, (0, 0, 0, 0)); cut.paste(src, (0, 0), bg_a)
+cut = cut.crop(cut.getbbox())
+cw, ch = cut.size
+pad = int(cw * 0.16)
+canvas = Image.new("RGBA", (cw + 2 * pad, int(ch * 1.30) + pad), (0, 0, 0, 255))
+yy, xx = np.mgrid[0:canvas.height, 0:canvas.width].astype(np.float64)
+gcx, gcy = canvas.width / 2, pad + ch * 0.45
+glow = np.exp(-(((xx - gcx) / (cw * 0.62)) ** 2 + ((yy - gcy) / (ch * 0.48)) ** 2)) * 30
+edge = np.clip(np.minimum.reduce([xx, canvas.width - 1 - xx, yy, canvas.height - 1 - yy]) / (pad * 0.9), 0, 1)
+glow *= edge ** 2
+halo = np.dstack([glow * 0.95, glow * 0.48, glow * 0.17, np.full_like(glow, 255)]).astype(np.uint8)
+canvas = Image.alpha_composite(canvas, Image.fromarray(halo, "RGBA"))
+refl = cut.transpose(Image.FLIP_TOP_BOTTOM)
+ra = np.array(refl).astype(np.float64)
+fade = np.clip(1 - np.arange(refl.height) / (refl.height * 0.22), 0, 1) ** 1.6 * 0.22
+ra[..., 3] *= fade[:, None]
+canvas.alpha_composite(Image.fromarray(ra.astype(np.uint8), "RGBA"), (pad, pad + ch + 6))
+canvas.alpha_composite(cut, (pad, pad))
+canvas = canvas.crop((0, 0, canvas.width, pad + int(ch * 1.20)))
+cover = os.path.join(TMP, "ngate_cover_cutout.png"); canvas.convert("RGB").save(cover)
+
+def img(path, width):
+    im = Image.open(path); h = width * im.height / im.width
+    return RLImage(path, width=width, height=h)
+
+# ---------- styles ----------
 st = {
-    "h1": ParagraphStyle("h1", fontName="PopB", fontSize=20, leading=24, textColor=DARK, spaceAfter=8, spaceBefore=4, keepWithNext=1),
-    "h2": ParagraphStyle("h2", fontName="PopM", fontSize=12.5, leading=16, textColor=ACC, spaceAfter=4, spaceBefore=9, keepWithNext=1),
+    "h1": ParagraphStyle("h1", fontName="PopB", fontSize=20, leading=24, textColor=ACC, spaceAfter=8, spaceBefore=4, keepWithNext=1),
+    "h2": ParagraphStyle("h2", fontName="PopM", fontSize=13, leading=17, textColor=DARK, spaceAfter=4, spaceBefore=10, keepWithNext=1),
     "p": ParagraphStyle("p", fontName="Pop", fontSize=9.6, leading=14, textColor=DARK, spaceAfter=5),
-    "note": ParagraphStyle("note", fontName="Pop", fontSize=9, leading=13, textColor=DARK, backColor=LIGHT, borderPadding=6, spaceBefore=6, spaceAfter=10),
-    "cap": ParagraphStyle("cap", fontName="Pop", fontSize=8.2, leading=11, textColor=GREY, alignment=TA_CENTER),
+    "tip": ParagraphStyle("tip", fontName="Pop", fontSize=9.0, leading=12.4, textColor=DARK, spaceAfter=3),
+    "small": ParagraphStyle("small", fontName="Pop", fontSize=8.2, leading=11.5, textColor=GREY),
     "cell": ParagraphStyle("cell", fontName="Pop", fontSize=8.4, leading=11, textColor=DARK),
-    "cellb": ParagraphStyle("cellb", fontName="PopM", fontSize=8.4, leading=11, textColor=colors.white),
-    "cover": ParagraphStyle("cover", fontName="PopB", fontSize=40, leading=48, textColor=colors.white, alignment=TA_CENTER),
-    "coversub": ParagraphStyle("coversub", fontName="Pop", fontSize=12, leading=17, textColor=colors.HexColor("#BDBAB4"), alignment=TA_CENTER),
-    "coverlang": ParagraphStyle("coverlang", fontName="PopM", fontSize=8.5, leading=11, textColor=ACC_L),
+    "cellb": ParagraphStyle("cellb", fontName="PopM", fontSize=8.4, leading=11, textColor=DARK),
+    "cells": ParagraphStyle("cells", fontName="Pop", fontSize=7.8, leading=10, textColor=DARK),
+    "cellbs": ParagraphStyle("cellbs", fontName="PopM", fontSize=7.8, leading=10, textColor=DARK),
 }
-W = A4[0] - 36 * mm
-
 def P(t, s="p"): return Paragraph(t, st[s])
-def img(name, width):
-    path = os.path.join(A, name); im = Image.open(path)
-    return RLImage(path, width=width, height=width * im.height / im.width)
-def table(rows, widths, header=True):
-    data = [[P(c, "cellb" if (header and r == 0) else "cell") for c in row] for r, row in enumerate(rows)]
+def bullets(items, s="p"): return [P("&bull;&nbsp;&nbsp;" + i, s) for i in items]
+def table(rows, widths, header=True, small=False):
+    data = [[P(c, ("cellbs" if small else "cellb") if (header and r == 0) else ("cells" if small else "cell")) for c in row] for r, row in enumerate(rows)]
     t = Table(data, colWidths=widths, repeatRows=1 if header else 0)
-    style = [("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, -1), 0.3, colors.HexColor("#E2D9CF")),
-             ("TOPPADDING", (0, 0), (-1, -1), 3.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5)]
-    if header: style += [("BACKGROUND", (0, 0), (-1, 0), DARK)]
+    style = [("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, -1), 0.3, colors.HexColor("#E6D8CB")),
+             ("TOPPADDING", (0, 0), (-1, -1), 2 if small else 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 2 if small else 3)]
+    if header: style += [("BACKGROUND", (0, 0), (-1, 0), LIGHT), ("LINEBELOW", (0, 0), (-1, 0), 0.8, ACC)]
     t.setStyle(TableStyle(style)); return t
-def row_of(items, total):
-    n = len(items); w = total / n
-    cells = [[img(f, w - 6 * mm), P(c, "cap")] for f, c in items]
-    t = Table([cells], colWidths=[w] * n)
-    t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (0, 0), (-1, -1), "CENTER")]))
-    return t
 
-T = {
-"en": dict(
- lang="ENGLISH", sub="Noise gate pedal for guitar &amp; bass - VST3", ver="User manual &nbsp;·&nbsp; version " + VERSION,
- intro_t="1. Introduction",
- intro="NGATE is a single-format pedal noise gate for guitar and bass, inspired by the classic noise gate pedals with a big THRESHOLD knob and a LEARN button (NG-1 type). One big brushed-aluminium <b>THRESHOLD</b> knob, a <b>LEARN</b> button that measures your noise floor and sets the threshold for you, a <b>SOFT / HARD</b> switch, a <b>BASS</b> mode, OPEN / GATE LEDs and a footswitch. It kills hum, hiss and amp noise between phrases, without chopping the end of your notes.",
- intro_note="<b>Anti-stutter</b>: hysteresis (3 dB in HARD, 6 dB in SOFT) and a hold time (25 / 60 ms HARD, 50 / 90 ms SOFT, guitar / bass), so a sustained note hovering around the threshold does not open and close in bursts. Both stereo channels are always gated together.",
- inst_t="2. Installation",
- inst=["<b>Windows</b>: copy <b>Ngate.vst3</b> into <b>C:\\Program Files\\Common Files\\VST3\\</b>.",
-       "<b>macOS</b> (universal binary): unzip, then copy <b>Ngate.vst3</b> into <b>~/Library/Audio/Plug-Ins/VST3/</b>. If macOS blocks it, run once in Terminal: <b>xattr -cr ~/Library/Audio/Plug-Ins/VST3/Ngate.vst3</b>.",
-       "<b>Reaper</b>: Options &gt; Preferences &gt; Plug-ins &gt; VST &gt; Re-scan. The plug-in appears as <b>Ngate (NINE HANDS | DSP)</b>."],
- ov_t="3. The interface",
- ov_cap="Numbers refer to the table below and to sections 4 and 5.",
- ov_hdr=["No.", "Element", "Function"],
- ov=[["1", "Readout", "Threshold in dB. Shows LEARN and a progress bar while learning."],
-     ["2", "LEARN", "Measures the noise floor (1.5 s) and sets the threshold."],
-     ["3", "Dot ring", "Live input meter: orange = below threshold (muted), green = above (passes)."],
-     ["4", "THRESHOLD", "Opening threshold, -95 dB to 0 dB."], ["5", "SOFT / HARD", "Gate character (mini toggle)."],
-     ["6/8", "OPEN / GATE", "Green = signal passes, orange = gate closed."], ["7", "BASS", "Bass mode (orange ring when on)."],
-     ["9", "Footswitch", "Effect on / off."], ["10", "Status line", "Over the logo: appears only when something changes, stays 2.5 s, then fades."],
-     ["11 / 12", "INPUT / OUTPUT", "Input on the right side, output on the left (female jack sockets)."]],
- ctl_t="4. Controls",
- thr_h="THRESHOLD (4)",
- thr="Opening threshold from -95 dB to 0 dB (default -60 dB), shown on the readout. Drag the knob, use the mouse wheel for fine tuning, double-click = -60 dB. The aluminium cap really turns (scratches and wear move with it) while the machined reflections stay under the light. The dot ring around it is a live input meter: the change from orange to green marks the threshold.",
- lrn_h="Setting the gate with LEARN (2)",
- lrn=["Plug in, set your amp sim and pedals as you will play, turn the guitar volume fully up.",
-      "Mute the strings with your hand (do not play) and click <b>LEARN</b>.",
-      "For 1.5 s the readout shows LEARN with an orange progress bar and an orange ring fills around the button. Click again to cancel.",
-      "NGATE sets the threshold just above the loudest noise it heard: <b>+5 dB in HARD, +3 dB in SOFT</b>. Mains hum (50 / 60 Hz) is ignored by the detector.",
-      "The status line shows the result, e.g. “Noise floor -70.0 dB -&gt; threshold -65.0 dB”. Fine-tune with the knob or the wheel."],
- sh_h="SOFT or HARD? (5)",
- sh=["<b>HARD</b> (default): a real gate, opens in 0.3 ms and closes fast (15 ms guitar / 35 ms bass). Tight high-gain rhythm, metal chugs, djent stops.",
-     "<b>SOFT</b>: a downward expander (1:3 below the threshold) with a slow release (180 ms guitar / 300 ms bass): the note fades out naturally. Cleans, crunch, ambient.",
-     "Click the lever to flip it, or click the SOFT or HARD word to choose directly."],
- curve="curve_en.png",
- curve_cap="Output level against input level, threshold -50 dB, full mute range: HARD drops to silence, SOFT slopes down.",
- bass_h="BASS mode (7)",
- bass="Low notes have long cycles (41 Hz low E = 24 ms per cycle; 31 Hz low B = 32 ms). In BASS mode the detector listens down to 22 Hz instead of 75 Hz, and envelope and hold times are longer, so long bass notes are not chopped. An orange ring lights around the button.",
- rng_h="Range (right-click)",
- rng="What the closed gate leaves: <b>Full mute</b> (default), <b>-40 dB</b> (keeps a breath of the room) or <b>-20 dB</b> (gentle noise reduction). Saved in presets.",
- fs_t="5. Footswitch, LEDs and status line",
- fs=["<b>Footswitch</b>: effect on / off with an 8 ms click-free fade. In bypass everything goes dark (dot ring, LEDs, BASS ring) and the readout dims.",
-     "<b>OPEN</b> LED green = signal passes; <b>GATE</b> LED orange = gate closed. In SOFT both cross-fade.",
-     "<b>Status line</b> (under the footswitch, over the logo): appears only when something changes (threshold, mode, input level, gate state, preset, MIDI), stays 2.5 s then fades. During a MIDI Learn it shows the prompt."],
- caps=["Signal passing: green dots above the threshold, OPEN lit.", "BASS + SOFT, gate closed: only the noise (orange) shows.",
-       "LEARN in progress: the status line shows the measurement.", "Bypass: everything goes dark."],
- midi_t="6. MIDI",
- midi_intro="NGATE listens to every MIDI channel (omni). <b>No CC is assigned by default</b>: every control is assigned with <b>MIDI Learn</b> to your controller (M-Vave Chocolate Plus, expression pedal...).",
- midi=["<b>Right-click a control</b> (THRESHOLD, SOFT / HARD, BASS, LEARN or the footswitch) and choose <b>MIDI Learn: &lt;control&gt; (none)</b> (or the learnt CC, e.g. <b>(CC 64)</b>). The footswitch offers its two entries: <b>Footswitch</b> (latching) and <b>Footswitch toggle</b> (each press).",
-       "The status line shows <b>MIDI LEARN: move a control for X</b>. Move a pedal or press a footswitch on your controller: the first CC received is assigned (it does not act on the sound) and the status line confirms <b>X = CC n</b> for 2 seconds.",
-       "<b>Clear MIDI: &lt;control&gt;</b> frees the CC; <b>Cancel MIDI learn</b> (or choosing the same Learn again) stops waiting. A CC already used by another control is taken away from it.",
-       "<b>Right-click elsewhere &gt; MIDI</b>: Learn for every control with its current CC (<b>none</b> until learnt), <b>Cancel MIDI learn</b> (while waiting) and <b>Clear all MIDI assignments</b>, which removes every assignment.",
-       "Assignments are <b>saved with the project</b>. A project made with an earlier version that still used the former factory numbers (CC 20 to 25) opens with no assignment: learn the controls you need again. A project in which you had changed an assignment keeps its assignments as saved. Every parameter can also be automated or MIDI-learned in the DAW."],
- mt_hdr=["Control", "Type"],
- mt=[["THRESHOLD", "Continuous: 0 = -95 dB, 127 = 0 dB."], ["SOFT / HARD", "Switch: ≥ 64 = HARD, &lt; 64 = SOFT."],
-     ["BASS", "Switch: ≥ 64 = Bass, &lt; 64 = Guitar."], ["LEARN button", "Trigger: each press (value rising over 64) starts a LEARN."],
-     ["Footswitch", "Latching footswitch: ≥ 64 = ON, &lt; 64 = OFF."], ["Footswitch toggle", "Momentary footswitch: each press toggles on / off."],
-     ["Program Change 1-10", "Factory presets 1 to 10 (program 0 = preset 1); always active, nothing to learn."]],
- win_t="7. Window",
- win=["NGATE opens at <b>60 %</b>, the same sizes as Echoflex, and the window can never be made smaller than 60 %. Right-click &gt; <b>Plugin size</b>: <b>60 %</b>, <b>75 %</b> or <b>100 %</b> resizes this window, with <b>(default)</b> shown next to the default size you chose.",
-      "At the bottom of the same menu, <b>Default size (new windows)</b> chooses the size at which every new NGATE window opens (a setting shared by all instances and saved on the computer, in NINE HANDS | DSP/Ngate/settings.xml of your user data folder); the open window takes that size at once. NGATE does not store a size in the project: every window, new or reopened, opens at the default size. Drag the bottom-right corner to enlarge it further (aspect ratio locked, up to 150 %)."],
- rc_hdr=["Right-click entry", "Content"],
- rc=[["MIDI Learn (on a control)", "MIDI Learn / Clear MIDI / Cancel MIDI learn"],
-     ["Plugin size", "60 % · 75 % · 100 % (“(default)” next to the default size) · Default size (new windows)"],
-     ["Factory presets", "1 to 10 (section 8)"], ["Load / Save user preset", "User 1 ... 9"],
-     ["LEARN noise floor (1.5 s)", "same as the LEARN button (Cancel LEARN while measuring)"],
-     ["Gate mode / Instrument", "Soft / Hard · Guitar / Bass"], ["Range (closed gate)", "Full mute · -40 dB · -20 dB"],
-     ["MIDI", "Learn x6 · Cancel MIDI learn · Clear all MIDI assignments · Program Change 1-10 (reminder)"]],
- pre_t="8. Presets",
- pre="10 factory presets (right-click &gt; Factory presets, the DAW preset menu, or Program Change). 9 user presets (Load / Save user preset) are shared by all instances (%APPDATA%\\NINE HANDS | DSP\\Ngate\\UserPresets.xml / ~/Library/Application Support/NINE HANDS | DSP/Ngate/).",
- pre_hdr=["Preset", "Thresh.", "Mode", "Instr.", "Range", "Use"],
- presets=[["1. Clean Single Coils", "-66 dB", "Soft", "Guitar", "Full", "Single coils in clean: keeps the tails."],
-          ["2. Crunch Humbuckers", "-58 dB", "Soft", "Guitar", "Full", "Crunch with humbuckers."],
-          ["3. High Gain Tight", "-48 dB", "Hard", "Guitar", "Full", "Tight high-gain rhythm."],
-          ["4. Metal Chug", "-42 dB", "Hard", "Guitar", "Full", "Palm-muted chugs, fast stops."],
-          ["5. Djent Staccato", "-36 dB", "Hard", "Guitar", "Full", "Very tight staccato silences."],
-          ["6. Fuzz Tamer", "-52 dB", "Soft", "Guitar", "-40 dB", "Tames a noisy fuzz, keeps a breath."],
-          ["7. Ambient Natural Decay", "-74 dB", "Soft", "Guitar", "-20 dB", "Gentle reduction under long tails."],
-          ["8. Bass Clean", "-68 dB", "Soft", "Bass", "Full", "Clean bass, long notes."],
-          ["9. Bass Drive", "-55 dB", "Hard", "Bass", "Full", "Overdriven bass, tight."],
-          ["10. Studio Silence", "-78 dB", "Hard", "Guitar", "Full", "Silent background for recording."]],
- tips_t="9. Tips",
- tips=["Put NGATE <b>first</b> in the Reaper chain, before the other NINE HANDS | DSP plug-ins and before Ampire: it removes the guitar's noise before it gets amplified.",
-       "For very high gain, a second NGATE in HARD <b>after</b> the distortion (still before Ampire) tightens the silences even more.",
-       "Low-tuned 7-string (drop G...) or bass: switch BASS on so long low notes are not chopped, and run LEARN with the strings muted at playing volume.",
-       "Learn the LEARN button on a spare footswitch of your controller: one press between songs re-measures the noise floor when you change guitar or amp channel."],
- tech_t="10. Specifications",
- tech_hdr=["Item", "Value"],
- tech=[["Format", "VST3 - Windows 11 (64-bit), macOS universal binary"],
-       ["Inspired by", "noise gate pedals with THRESHOLD knob + LEARN button (NG-1 type)"], ["Threshold", "-95 ... 0 dB (-60 dB)"],
-       ["HARD", "open 0.3 ms, close 15 ms (guitar) / 35 ms (bass), hysteresis 3 dB, hold 25 / 60 ms"],
-       ["SOFT", "1:3 downward expansion, release 180 ms / 300 ms, hysteresis 6 dB, hold 50 / 90 ms"],
-       ["Detector", "from 75 Hz (guitar) or 22 Hz (bass); mains hum ignored by LEARN"],
-       ["LEARN", "1.5 s measurement, threshold = noise + 5 dB (HARD) / + 3 dB (SOFT)"], ["Range", "Full mute · -40 dB · -20 dB"],
-       ["Bypass", "8 ms fade, click-free"], ["Channels", "mono or stereo, both channels gated together"], ["Presets", "10 factory + 9 user"],
-       ["MIDI", "MIDI Learn on every control, no CC assigned by default, omni, Program Change 1-10; assignments saved with the project"],
-       ["Window", "60 % / 75 % / 100 % (Plugin size), default size of new windows to choose, corner resize up to 150 %, never smaller than 60 %"],
-       ["Windows stability", "anti-freeze v2: the audio thread never calls the host, window refresh driven by a timer with a watchdog"]]),
-"fr": dict(
- lang="FRANÇAIS", sub="Pédale noise gate pour guitare &amp; basse - VST3", ver="Notice d'utilisation &nbsp;·&nbsp; version " + VERSION,
- intro_t="1. Présentation",
- intro="NGATE est un noise gate au format pédale simple, pour guitare et basse, inspiré des pédales noise gate classiques à gros potard THRESHOLD et bouton LEARN (type NG-1). Un gros potard <b>THRESHOLD</b> en aluminium brossé, un bouton <b>LEARN</b> qui mesure le bruit de fond et règle le seuil à votre place, un switch <b>SOFT / HARD</b>, un mode <b>BASS</b>, des LED OPEN / GATE et un footswitch. Il coupe ronflement, souffle et bruit d'ampli entre les phrases, sans hacher la fin des notes.",
- intro_note="<b>Anti-« bégaiement »</b> : hystérésis (3 dB en HARD, 6 dB en SOFT) et temps de maintien (25 / 60 ms HARD, 50 / 90 ms SOFT, guitare / basse) : une note tenue qui passe autour du seuil n'ouvre et ne ferme pas en rafale. Les deux voies stéréo sont toujours coupées ensemble.",
- inst_t="2. Installation",
- inst=["<b>Windows</b> : copiez <b>Ngate.vst3</b> dans <b>C:\\Program Files\\Common Files\\VST3\\</b>.",
-       "<b>macOS</b> (binaire universel) : dézippez puis copiez <b>Ngate.vst3</b> dans <b>~/Library/Audio/Plug-Ins/VST3/</b>. Si macOS le bloque, lancez une fois dans le Terminal : <b>xattr -cr ~/Library/Audio/Plug-Ins/VST3/Ngate.vst3</b>.",
-       "<b>Reaper</b> : Options &gt; Préférences &gt; Plug-ins &gt; VST &gt; Re-scan. Le plugin apparaît sous le nom <b>Ngate (NINE HANDS | DSP)</b>."],
- ov_t="3. L'interface",
- ov_cap="Les numéros renvoient au tableau ci-dessous et aux sections 4 et 5.",
- ov_hdr=["N°", "Élément", "Fonction"],
- ov=[["1", "Afficheur", "Seuil en dB. Affiche LEARN et une barre de progression pendant la mesure."],
-     ["2", "LEARN", "Mesure le bruit de fond (1,5 s) et règle le seuil."],
-     ["3", "Couronne de points", "Vumètre d'entrée : orange = sous le seuil (coupé), vert = au-dessus (passe)."],
-     ["4", "THRESHOLD", "Seuil d'ouverture, de -95 dB à 0 dB."], ["5", "SOFT / HARD", "Caractère du gate (mini-inverseur)."],
-     ["6/8", "OPEN / GATE", "Verte = le signal passe, orange = gate fermé."], ["7", "BASS", "Mode basse (couronne orange quand actif)."],
-     ["9", "Footswitch", "Effet marche / arrêt."], ["10", "Ligne d'état", "Par-dessus le logo : n'apparaît que lorsqu'un réglage bouge, reste 2,5 s puis s'efface."],
-     ["11 / 12", "INPUT / OUTPUT", "Entrée à droite, sortie à gauche (embases jack femelles)."]],
- ctl_t="4. Les commandes",
- thr_h="THRESHOLD (4)",
- thr="Seuil d'ouverture de -95 dB à 0 dB (défaut -60 dB), affiché sur l'afficheur. Tirez le potard, molette pour le réglage fin, double-clic = -60 dB. Le chapeau en aluminium tourne vraiment (rayures et usure tournent avec lui) tandis que les reflets d'usinage restent sous la lumière. La couronne de points est un vumètre d'entrée en direct : le passage de l'orange au vert marque le seuil.",
- lrn_h="Régler le gate avec LEARN (2)",
- lrn=["Branchez-vous, réglez simulateur et pédales comme pour jouer, volume de la guitare à fond.",
-      "Étouffez les cordes avec la main (sans jouer) et cliquez sur <b>LEARN</b>.",
-      "Pendant 1,5 s, l'afficheur indique LEARN avec une barre orange et un anneau orange se remplit autour du bouton. Nouveau clic = annuler.",
-      "NGATE place le seuil juste au-dessus du bruit le plus fort entendu : <b>+5 dB en HARD, +3 dB en SOFT</b>. Le ronflement secteur (50 / 60 Hz) est ignoré par le détecteur.",
-      "La ligne d'état donne le résultat, par ex. « Noise floor -70.0 dB -&gt; threshold -65.0 dB ». Affinez au potard ou à la molette."],
- sh_h="SOFT ou HARD ? (5)",
- sh=["<b>HARD</b> (défaut) : un vrai gate, ouverture en 0,3 ms, fermeture rapide (15 ms guitare / 35 ms basse). Rythmiques high-gain serrées, chugs metal, arrêts djent.",
-     "<b>SOFT</b> : un expandeur vers le bas (1:3 sous le seuil) avec une retombée lente (180 ms guitare / 300 ms basse) : la note s'éteint naturellement. Clair, crunch, ambiant.",
-     "Clic sur le levier = bascule, clic sur SOFT ou HARD = choix direct."],
- curve="curve_fr.png",
- curve_cap="Niveau de sortie selon le niveau d'entrée, seuil -50 dB, range Full mute : HARD tombe au silence, SOFT descend en pente.",
- bass_h="Mode BASS (7)",
- bass="Les notes graves ont des cycles longs (Mi grave 41 Hz = 24 ms par cycle ; Si grave 31 Hz = 32 ms). En mode BASS, le détecteur écoute jusqu'à 22 Hz au lieu de 75 Hz, avec une enveloppe et un maintien plus longs : les notes longues ne sont pas hachées. Une couronne orange s'allume autour du bouton.",
- rng_h="Range (clic droit)",
- rng="Ce que laisse le gate fermé : <b>Full mute</b> (coupure totale, défaut), <b>-40 dB</b> (garde un souffle de pièce) ou <b>-20 dB</b> (réduction de bruit douce). Enregistré dans les presets.",
- fs_t="5. Footswitch, LED et ligne d'état",
- fs=["<b>Footswitch</b> : effet marche / arrêt, fondu de 8 ms sans clic. En bypass tout s'éteint (couronne, LED, couronne BASS) et l'afficheur baisse.",
-     "LED <b>OPEN</b> verte = le signal passe ; LED <b>GATE</b> orange = gate fermé. En SOFT, les deux se croisent en fondu.",
-     "<b>Ligne d'état</b> (sous le footswitch, par-dessus le logo) : n'apparaît que lorsqu'un réglage bouge (seuil, mode, niveau d'entrée, état du gate, preset, MIDI), reste 2,5 s puis s'efface. Pendant un MIDI Learn, elle affiche l'invite."],
- caps=["Signal qui passe : points verts au-dessus du seuil, OPEN allumée.", "BASS + SOFT, gate fermé : seul le bruit (orange) apparaît.",
-       "LEARN en cours : la ligne d'état affiche la mesure.", "Bypass : tout s'éteint."],
- midi_t="6. MIDI",
- midi_intro="NGATE écoute tous les canaux MIDI (omni). <b>Aucun CC n'est assigné par défaut</b> : chaque commande s'assigne par <b>MIDI Learn</b> à votre contrôleur (M-Vave Chocolate Plus, pédale d'expression...).",
- midi=["<b>Clic droit sur une commande</b> (THRESHOLD, SOFT / HARD, BASS, LEARN ou le footswitch) puis <b>MIDI Learn: &lt;commande&gt; (none)</b> (ou le CC appris, par ex. <b>(CC 64)</b>). Le footswitch propose ses deux entrées : <b>Footswitch</b> (à accrochage) et <b>Footswitch toggle</b> (à chaque appui).",
-       "La ligne d'état affiche <b>MIDI LEARN: move a control for X</b>. Bougez une pédale ou appuyez sur un footswitch du contrôleur : le premier CC reçu est assigné (il n'agit pas sur le son) et la ligne d'état confirme <b>X = CC n</b> pendant 2 secondes.",
-       "<b>Clear MIDI: &lt;commande&gt;</b> libère le CC ; <b>Cancel MIDI learn</b> (ou rechoisir le même Learn) arrête l'attente. Un CC déjà utilisé par une autre commande lui est retiré.",
-       "<b>Clic droit ailleurs &gt; MIDI</b> : Learn de chaque commande avec son CC actuel (<b>none</b> tant qu'elle n'est pas apprise), <b>Cancel MIDI learn</b> (pendant l'attente) et <b>Clear all MIDI assignments</b>, qui efface toutes les assignations.",
-       "Les assignations sont <b>enregistrées avec le projet</b>. Un projet fait avec une version précédente qui utilisait encore les anciens numéros d'usine (CC 20 à 25) s'ouvre sans aucune assignation : réapprenez les commandes voulues. Un projet où vous aviez changé une assignation garde ses assignations telles qu'enregistrées. Tous les paramètres sont aussi automatisables et assignables dans le DAW."],
- mt_hdr=["Commande", "Type"],
- mt=[["THRESHOLD", "Continu : 0 = -95 dB, 127 = 0 dB."], ["SOFT / HARD", "Bascule : ≥ 64 = HARD, &lt; 64 = SOFT."],
-     ["BASS", "Bascule : ≥ 64 = Basse, &lt; 64 = Guitare."], ["Bouton LEARN", "Déclencheur : chaque appui (valeur qui passe 64) lance un LEARN."],
-     ["Footswitch", "Footswitch à accrochage : ≥ 64 = ON, &lt; 64 = OFF."], ["Footswitch toggle", "Footswitch momentané : chaque appui inverse marche / arrêt."],
-     ["Program Change 1-10", "Presets d'usine 1 à 10 (programme 0 = preset 1) ; toujours actif, rien à apprendre."]],
- win_t="7. Fenêtre",
- win=["NGATE s'ouvre à <b>60 %</b>, avec les mêmes tailles qu'Echoflex, et la fenêtre ne peut jamais être plus petite que 60 %. Clic droit &gt; <b>Plugin size</b> : <b>60 %</b>, <b>75 %</b> ou <b>100 %</b> redimensionne cette fenêtre, et <b>(default)</b> est indiqué à côté de la taille par défaut choisie.",
-      "En bas du même menu, <b>Default size (new windows)</b> choisit la taille d'ouverture de toutes les nouvelles fenêtres de NGATE (réglage commun à toutes les instances, enregistré sur l'ordinateur, dans NINE HANDS | DSP/Ngate/settings.xml du dossier de données de l'utilisateur) ; la fenêtre ouverte prend aussitôt cette taille. NGATE n'enregistre pas de taille dans le projet : chaque fenêtre, nouvelle ou rouverte, s'ouvre à la taille par défaut. Tirez le coin inférieur droit pour l'agrandir davantage (proportions bloquées, jusqu'à 150 %)."],
- rc_hdr=["Entrée du clic droit", "Contenu"],
- rc=[["MIDI Learn (sur une commande)", "MIDI Learn / Clear MIDI / Cancel MIDI learn"],
-     ["Plugin size", "60 % · 75 % · 100 % (« (default) » à côté de la taille par défaut) · Default size (new windows)"],
-     ["Factory presets", "1 à 10 (section 8)"], ["Load / Save user preset", "User 1 ... 9"],
-     ["LEARN noise floor (1.5 s)", "comme le bouton LEARN (Cancel LEARN pendant la mesure)"],
-     ["Gate mode / Instrument", "Soft / Hard · Guitar / Bass"], ["Range (closed gate)", "Full mute · -40 dB · -20 dB"],
-     ["MIDI", "Learn x6 · Cancel MIDI learn · Clear all MIDI assignments · Program Change 1-10 (rappel)"]],
- pre_t="8. Presets",
- pre="10 presets d'usine (clic droit &gt; Factory presets, menu des presets du DAW, ou Program Change). 9 presets utilisateur (Load / Save user preset) communs à toutes les instances (%APPDATA%\\NINE HANDS | DSP\\Ngate\\UserPresets.xml / ~/Library/Application Support/NINE HANDS | DSP/Ngate/).",
- pre_hdr=["Preset", "Seuil", "Mode", "Instr.", "Range", "Usage"],
- presets=[["1. Clean Single Coils", "-66 dB", "Soft", "Guitare", "Totale", "Simples en son clair : garde les fins de notes."],
-          ["2. Crunch Humbuckers", "-58 dB", "Soft", "Guitare", "Totale", "Crunch avec humbuckers."],
-          ["3. High Gain Tight", "-48 dB", "Hard", "Guitare", "Totale", "Rythmique high-gain serrée."],
-          ["4. Metal Chug", "-42 dB", "Hard", "Guitare", "Totale", "Chugs en palm-mute, arrêts nets."],
-          ["5. Djent Staccato", "-36 dB", "Hard", "Guitare", "Totale", "Silences staccato très serrés."],
-          ["6. Fuzz Tamer", "-52 dB", "Soft", "Guitare", "-40 dB", "Dompte une fuzz bruyante, garde un souffle."],
-          ["7. Ambient Natural Decay", "-74 dB", "Soft", "Guitare", "-20 dB", "Réduction douce sous les longues queues."],
-          ["8. Bass Clean", "-68 dB", "Soft", "Basse", "Totale", "Basse claire, notes longues."],
-          ["9. Bass Drive", "-55 dB", "Hard", "Basse", "Totale", "Basse saturée, serrée."],
-          ["10. Studio Silence", "-78 dB", "Hard", "Guitare", "Totale", "Fond silencieux pour l'enregistrement."]],
- tips_t="9. Conseils",
- tips=["Placez NGATE <b>en premier</b> dans la chaîne Reaper, avant les autres plugins NINE HANDS | DSP et avant Ampire : il coupe le bruit de la guitare avant qu'il soit amplifié.",
-       "Pour un son très saturé, un deuxième NGATE en HARD <b>après</b> la distorsion (toujours avant Ampire) resserre encore les silences.",
-       "7 cordes accordée grave (drop G...) ou basse : activez BASS pour ne pas hacher les notes graves longues, et lancez LEARN cordes étouffées au volume de jeu.",
-       "Apprenez le bouton LEARN sur un footswitch libre du contrôleur : un appui entre deux morceaux remesure le bruit de fond quand vous changez de guitare ou de canal d'ampli."],
- tech_t="10. Caractéristiques techniques",
- tech_hdr=["Élément", "Valeur"],
- tech=[["Format", "VST3 - Windows 11 (64 bits), macOS binaire universel"],
-       ["Inspiré de", "pédales noise gate à potard THRESHOLD + bouton LEARN (type NG-1)"], ["Threshold", "-95 ... 0 dB (-60 dB)"],
-       ["HARD", "ouverture 0,3 ms, fermeture 15 ms (guitare) / 35 ms (basse), hystérésis 3 dB, maintien 25 / 60 ms"],
-       ["SOFT", "expansion 1:3 vers le bas, retombée 180 ms / 300 ms, hystérésis 6 dB, maintien 50 / 90 ms"],
-       ["Détecteur", "dès 75 Hz (guitare) ou 22 Hz (basse) ; ronflement secteur ignoré par LEARN"],
-       ["LEARN", "mesure de 1,5 s, seuil = bruit + 5 dB (HARD) / + 3 dB (SOFT)"], ["Range", "Full mute · -40 dB · -20 dB"],
-       ["Bypass", "fondu de 8 ms, sans clic"], ["Canaux", "mono ou stéréo, les deux voies coupées ensemble"], ["Presets", "10 usine + 9 utilisateur"],
-       ["MIDI", "MIDI Learn sur chaque commande, aucun CC assigné par défaut, omni, Program Change 1-10 ; assignations enregistrées avec le projet"],
-       ["Fenêtre", "60 % / 75 % / 100 % (Plugin size), taille par défaut des nouvelles fenêtres au choix, coin jusqu'à 150 %, jamais sous 60 %"],
-       ["Stabilité Windows", "anti-gel v2 : le thread audio n'appelle jamais l'hôte, rafraîchissement de la fenêtre piloté par un timer avec chien de garde"]]),
-}
+# ---------- donnees (identiques au code livre : PluginProcessor.cpp) ----------
+FACTORY = [  # nom, seuil, hard, bass, range
+    ("Clean Single Coils", -66, 0, 0, 0, "Simple bobinages en son clair : seuil bas et fermeture douce, les notes tenues s'éteignent naturellement, seul le souffle des micros disparaît."),
+    ("Crunch Humbuckers", -58, 0, 0, 0, "Humbuckers dans un ampli légèrement saturé : coupe le souffle entre les accords sans raccourcir les fins de phrase."),
+    ("High Gain Tight", -48, 1, 0, 0, "Ampli à fort gain : fermeture rapide, silence net entre les riffs."),
+    ("Metal Chug", -42, 1, 0, 0, "Palm mutes serrés en metal : la note s'arrête dès que la main étouffe les cordes."),
+    ("Djent Staccato", -36, 1, 0, 0, "Seuil haut pour des rythmiques très hachées : chaque coup de médiator est découpé, les silences sont absolus."),
+    ("Fuzz Tamer", -52, 0, 0, 1, "Pour calmer le souffle d'une fuzz ou d'un overdrive bruyant : fermeture douce et plancher à −40 dB, le gate ne coupe jamais net."),
+    ("Ambient Natural Decay", -74, 0, 0, 2, "Pour les sons longs et les effets d'ambiance : seuil très bas, plancher à −20 dB, seul le bruit de fond en dessous des notes est atténué."),
+    ("Bass Clean", -68, 0, 1, 0, "Basse en son clair : mode BASS (détection du Mi et du Si grave), fermeture douce."),
+    ("Bass Drive", -55, 1, 1, 0, "Basse saturée : mode BASS et fermeture rapide pour un grave tendu et des silences nets."),
+    ("Studio Silence", -78, 1, 0, 0, "Pour l'enregistrement : seuil très bas, juste au-dessus du bruit de fond, qui ne touche pas au jeu."),
+]
+RANGE = ["coupure totale", "−40 dB", "−20 dB"]
 
-def section(lang):
-    t = T[lang]; f = []
-    def bl(items): return [P("&bull;&nbsp;&nbsp;" + i) for i in items]
-    def nl(items): return [P(f"{k + 1}.&nbsp;&nbsp;" + i) for k, i in enumerate(items)]
-    f.append(NextPageTemplate("p"))
-    f.append(Spacer(1, 2 * mm)); f.append(P(t["lang"], "coverlang")); f.append(Spacer(1, 4 * mm))
-    f.append(img("cover.png", W * 0.52)); f.append(Spacer(1, 8 * mm))
-    f.append(P("N G A T E", "cover")); f.append(Spacer(1, 2 * mm))
-    f.append(P(t["sub"], "coversub")); f.append(P(t["ver"], "coversub")); f.append(Spacer(1, 9 * mm))
-    f.append(img("logo_studio_wiga_blanc.png", 52 * mm)); f.append(PageBreak())
-    f.append(P(t["intro_t"], "h1")); f.append(P(t["intro"])); f.append(P(t["intro_note"], "note"))
-    f.append(P(t["inst_t"], "h1")); f += bl(t["inst"])
-    f.append(PageBreak())
-    f.append(P(t["ov_t"], "h1")); f.append(img("overview_annotated.png", W * 0.62)); f.append(P(t["ov_cap"], "cap")); f.append(Spacer(1, 4 * mm))
-    f.append(table([t["ov_hdr"]] + t["ov"], [16 * mm, 34 * mm, W - 50 * mm]))
-    f.append(PageBreak())
-    f.append(P(t["ctl_t"], "h1")); f.append(P(t["thr_h"], "h2")); f.append(P(t["thr"]))
-    f.append(P(t["lrn_h"], "h2")); f += nl(t["lrn"])
-    f.append(P(t["sh_h"], "h2")); f += bl(t["sh"])
-    f.append(KeepTogether([img(t["curve"], W * 0.62), P(t["curve_cap"], "cap")]))
-    f.append(P(t["bass_h"], "h2")); f.append(P(t["bass"]))
-    f.append(P(t["rng_h"], "h2")); f.append(P(t["rng"]))
-    f.append(PageBreak())
-    f.append(P(t["fs_t"], "h1")); f += bl(t["fs"]); f.append(Spacer(1, 3 * mm))
-    c = t["caps"]
-    f.append(row_of([("state_open.png", c[0]), ("state_bass_soft.png", c[1])], W * 0.80))
-    f.append(row_of([("state_learn.png", c[2]), ("state_bypass.png", c[3])], W * 0.80))
-    f.append(PageBreak())
-    f.append(P(t["midi_t"], "h1")); f.append(P(t["midi_intro"])); f += bl(t["midi"])
-    f.append(KeepTogether([Spacer(1, 2 * mm), table([t["mt_hdr"]] + t["mt"], [42 * mm, W - 42 * mm])]))
-    f.append(PageBreak())
-    f.append(P(t["win_t"], "h1")); f += [P(x) for x in t["win"]]
-    f.append(KeepTogether([Spacer(1, 2 * mm), table([t["rc_hdr"]] + t["rc"], [52 * mm, W - 52 * mm])]))
-    f.append(PageBreak())
-    f.append(P(t["pre_t"], "h1")); f.append(P(t["pre"]))
-    f.append(table([t["pre_hdr"]] + t["presets"], [42 * mm, 17 * mm, 13 * mm, 17 * mm, 16 * mm, W - 105 * mm]))
-    f.append(P(t["tips_t"], "h1")); f += bl(t["tips"])
-    f.append(KeepTogether([P(t["tech_t"], "h1"), table([t["tech_hdr"]] + t["tech"], [36 * mm, W - 36 * mm])]))
-    # pas d'historique des versions dans la notice (demande de l'utilisateur)
-    f.append(PageBreak())
-    return f
+W = A4[0] - 36 * mm
+f = [NextPageTemplate("p"), Spacer(1, 1), PageBreak()]
+
+f.append(P("1. Présentation", "h1"))
+f += [P("<b>NGATE</b> est un noise gate NINE HANDS | DSP pour guitare et basse, au format pédale simple. Il coupe le ronflement et le souffle entre les notes, quand vous ne jouez pas, et laisse passer l'attaque et la fin des notes telles quelles. Il s'inspire des noise gates de pédalier à un potard : un grand potard <b>THRESHOLD</b>, un bouton <b>LEARN</b> qui règle le seuil tout seul en écoutant le bruit de fond, un inverseur <b>SOFT / HARD</b> et un mode <b>BASS</b>."),
+      P("La couronne de points autour du potard est un vumètre : elle montre en direct le niveau qui arrive dans la pédale, en orange sous le seuil (le gate se ferme) et en vert au-dessus (le gate est ouvert). Deux LED, <b>OPEN</b> et <b>GATE</b>, indiquent l'état du gate.")]
+f.append(P("2. Installation", "h1"))
+for h, x in [("Windows", "Téléchargez <b>Ngate-VST3-Windows.zip</b> (bouton Windows du dépôt GitHub Nine-Hands-Dsp/ngate, rubrique Releases), décompressez-le et copiez le dossier <b>Ngate.vst3</b> dans <b>C:\\Program Files\\Common Files\\VST3</b>."),
+             ("macOS", "Téléchargez <b>Ngate-VST3-macOS.zip</b>, décompressez-le et copiez <b>Ngate.vst3</b> dans <b>~/Bibliothèque/Audio/Plug-Ins/VST3</b>. Si macOS le bloque, tapez <b>xattr -cr ~/Library/Audio/Plug-Ins/VST3/Ngate.vst3</b> dans le Terminal. Le binaire est universel (Apple Silicon et Intel)."),
+             ("Reaper", "Options &gt; Préférences &gt; Plug-ins &gt; VST &gt; <b>Re-scan</b>. Le plugin apparaît sous le nom <b>Ngate (NINE HANDS | DSP)</b>, dans la catégorie Dynamics. Pour le piloter avec des footswitchs ou une pédale d'expression MIDI, la piste doit recevoir le MIDI du contrôleur (armement ou monitoring d'entrée, entrée MIDI réglée sur votre appareil, par exemple la M-Vave Chocolate Plus).")]:
+    f.append(P(h, "h2")); f.append(P(x))
+f.append(PageBreak())
+
+f.append(P("3. Vue d'ensemble de l'interface", "h1"))
+ov_rows = [["#", "Commande", "Rôle"],
+    ["1", "THRESHOLD", "Seuil d'ouverture du gate, de −95 dB à 0 dB. Glisser vers le haut / le bas, molette, double-clic = −60 dB, clic droit = MIDI Learn (valable pour toutes les commandes)."],
+    ["2", "Couronne de points", "Vumètre du signal d'entrée : orange sous le seuil, vert au-dessus."],
+    ["3", "Afficheur", "Valeur du seuil en dB ; « LEARN » et une barre de progression pendant l'apprentissage."],
+    ["4", "LEARN", "Mesure le bruit de fond pendant 1,5 s et règle le seuil juste au-dessus."],
+    ["5", "SOFT / HARD", "Fermeture douce et naturelle (SOFT) ou rapide et serrée (HARD)."],
+    ["6", "LED OPEN", "Verte : le gate est ouvert, le son passe."],
+    ["7", "LED GATE", "Orange : le gate est fermé (le bruit est coupé)."],
+    ["8", "BASS", "Mode basse : la détection descend jusqu'au Si grave. Couronne orange quand il est actif."],
+    ["9", "Barre de presets / ligne d'état", "Au repos : flèches = preset précédent / suivant, clic sur le nom = menu des presets. Pendant un réglage : valeur en direct."],
+    ["10", "Footswitch", "Effet actif / bypass."],
+    ["11", "OUT", "Jack de sortie."],
+    ["12", "IN", "Jack d'entrée."]]
+ov = Table([[[img(annotated, 88 * mm)], table(ov_rows, [8 * mm, 25 * mm, W - 92 * mm - 33 * mm])]], colWidths=[92 * mm, W - 92 * mm])
+ov.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
+f.append(ov); f.append(PageBreak())
+
+f.append(P("4. Les commandes en détail", "h1"))
+f.append(P("THRESHOLD", "h2"))
+f.append(P("Le seuil au-dessus duquel le gate s'ouvre, de <b>−95 dB</b> (tout à gauche, le gate ne se ferme presque jamais) à <b>0 dB</b> (tout à droite). Tant que le signal reste au-dessus du seuil, le son passe intact ; quand il retombe en dessous (cordes étouffées, silence entre deux phrases), le gate se referme et coupe le bruit. Le bon réglage est juste au-dessus du bruit de fond quand vous ne jouez pas : regardez la couronne, les points orange qui restent allumés au repos montrent le niveau du bruit. Le seuil change en douceur (lissage de 20 ms), sans clic, même piloté par une pédale d'expression."))
+f.append(P("LEARN", "h2"))
+f.append(P("Étouffez les cordes, gardez le volume de la guitare comme pour jouer, puis cliquez sur <b>LEARN</b> (ou appuyez sur le footswitch MIDI qui lui est assigné). Pendant <b>1,5 seconde</b>, la pédale écoute le bruit de fond : l'afficheur affiche <b>LEARN</b> avec une barre de progression, le bouton s'entoure d'orange et la ligne d'état demande <i>mute the strings</i>. Les 120 premières millisecondes sont ignorées (le bruit du clic ou de l'appui). Le seuil est alors placé au niveau du bruit mesuré <b>+ 3 dB en SOFT</b> ou <b>+ 5 dB en HARD</b> (jamais au-dessus de −6 dB) ; la ligne d'état affiche par exemple <i>Noise −68.6 dB &gt; −63.6 dB</i>. Un second clic pendant la mesure l'annule."))
+f.append(KeepTogether([Spacer(1, 2 * mm), img(learn_img, W * 0.70), P("Afficheur et LEARN : au repos, pendant la mesure, puis seuil appris.", "small")]))
+f.append(P("Inverseur SOFT / HARD", "h2"))
+f.append(P("<b>SOFT</b> (levier à gauche) : attaque de 2 ms, maintien de 50 ms, relâchement de 180 ms et hystérésis de 6 dB ; sous le seuil, le gate agit comme un expandeur (1:3) au lieu de couper net : les notes tenues s'éteignent naturellement. <b>HARD</b> (levier à droite) : attaque de 0,3 ms, maintien de 25 ms, relâchement de 15 ms, hystérésis de 3 dB et coupure franche : le silence tombe dès que vous étouffez les cordes, idéal pour le metal et les rythmiques hachées. Cliquez sur le levier pour le basculer, ou directement sur le mot <b>SOFT</b> ou <b>HARD</b> ; la molette fonctionne aussi."))
+f.append(KeepTogether([Spacer(1, 2 * mm), img(tog_img, W * 0.80), P("Inverseur en position SOFT, puis HARD.", "small")]))
+f.append(P("BASS", "h2"))
+f.append(P("Un clic active le mode basse (le bouton s'entoure d'orange). La détection descend jusqu'à 22 Hz au lieu de 75 Hz, pour que le Mi grave (41 Hz) et le Si grave (31 Hz) d'une basse ouvrent bien le gate ; en mode guitare, au contraire, le ronflement secteur (50 / 60 Hz) et les infra-graves ne l'ouvrent pas. Les temps sont aussi allongés pour suivre les notes graves : maintien de 90 ms et relâchement de 300 ms en SOFT, 60 ms et 35 ms en HARD. Utile aussi pour une guitare 7 cordes accordée en Sol ou plus bas."))
+f.append(P("Range (clic droit &gt; Gate settings)", "h2"))
+f.append(P("Ce que devient le son quand le gate est fermé : <b>Full mute</b> (coupure totale, par défaut), <b>−40 dB</b> (il reste un léger souffle, plus naturel) ou <b>−20 dB</b> (atténuation douce, pour les sons d'ambiance). Le même sous-menu reprend SOFT / HARD et Guitar / Bass."))
+
+f.append(P("5. Footswitch et LED", "h1"))
+f += bullets(["<b>Footswitch</b> : il bascule dès l'appui, comme sur Echoflex. En bypass, le signal passe sans traitement ; le passage se fait par un fondu de 8 ms, sans clic.",
+              "<b>LED OPEN et GATE</b> : la LED verte OPEN s'allume quand le gate est ouvert, la LED orange GATE quand il se ferme ; elles se croisent en fondu et éclairent la façade autour d'elles. En bypass, les LED, la couronne et le bouton BASS s'éteignent et l'afficheur baisse."])
+f.append(KeepTogether([Spacer(1, 2 * mm), img(leds_img, W), P("Gate ouvert (OPEN vert) ; gate fermé en mode BASS (GATE orange, BASS entouré d'orange) ; bypass.", "small")]))
+
+f.append(P("6. MIDI", "h1"))
+f.append(P("Toutes les commandes se pilotent depuis un contrôleur MIDI (footswitchs, pédale d'expression). Ngate écoute tous les canaux MIDI. <b>Aucun CC n'est assigné d'office</b> : vous choisissez chacun avec le <b>MIDI Learn</b>, le plugin ne réagit donc jamais à un contrôleur que vous n'avez pas assigné vous-même."))
+midi = [["Commande", "Assignation", "Type"],
+        ["Threshold", "MIDI Learn", "Continu : 0 = −95 dB, 127 = 0 dB"],
+        ["Soft / Hard", "MIDI Learn", "Bascule : 64 ou plus = HARD"],
+        ["Bass", "MIDI Learn", "Bascule : 64 ou plus = BASS"],
+        ["LEARN button", "MIDI Learn", "Déclencheur : chaque appui lance un LEARN"],
+        ["Footswitch", "MIDI Learn", "À accrochage : 64 ou plus = effet actif"],
+        ["Footswitch toggle", "MIDI Learn", "Momentané : chaque appui inverse l'état"]]
+f.append(KeepTogether([table(midi, [36 * mm, 26 * mm, W - 62 * mm])]))
+f.append(Spacer(1, 2 * mm))
+f += bullets(["<b>MIDI Learn</b> : clic droit sur une commande, choisissez <b>MIDI Learn: &lt;nom&gt;</b>, puis bougez la pédale d'expression ou appuyez sur le bouton MIDI. La ligne d'état affiche <b>MIDI LEARN</b> et le nom de la commande, puis confirme pendant 2 secondes, par ex. <b>Threshold = CC 11</b>. Le premier CC reçu sert seulement à l'assignation, il n'agit pas sur le son. Un CC déjà utilisé par une autre commande passe à la nouvelle. <b>Clear MIDI</b> retire une assignation ; clic droit &gt; MIDI &gt; <b>Clear all MIDI assignments</b> les retire toutes. Les assignations sont sauvegardées avec le projet.",
+              "<b>Footswitch</b> : deux assignations possibles, à choisir selon votre pédalier : <b>Footswitch</b> (le bouton envoie 127 puis 0) ou <b>Footswitch toggle</b> (chaque appui inverse l'état).",
+              "<b>Program Change 1 à 10</b> : rappel des presets d'usine. Tous les paramètres sont aussi automatisables dans le DAW."])
+
+f.append(P("7. Fenêtre et menus", "h1"))
+f.append(P("Ngate utilise le format pédale simple d'Echoflex : la fenêtre s'ouvre à <b>60 %</b> et ne peut jamais être réduite en dessous. Clic droit &gt; <b>Plugin size</b> : <b>60 %</b>, <b>75 %</b> ou <b>100 %</b> pour cette fenêtre, « (default) » indiquant la taille par défaut ; <b>Default size (new windows)</b> choisit la taille d'ouverture de toutes les nouvelles fenêtres de Ngate (réglage commun à toutes les instances, enregistré sur l'ordinateur) et redimensionne aussitôt la fenêtre courante. La taille n'est pas sauvegardée avec le projet. Vous pouvez aussi tirer le coin en bas à droite jusqu'à 150 % (les proportions sont conservées)."))
+f.append(P("La <b>barre de presets</b> et la <b>ligne d'état</b> partagent la même pastille. Au repos, elle affiche le preset en cours (ou <i>Edited</i>). Dès qu'un réglage bouge (souris, molette, automation, MIDI), la ligne d'état prend sa place et affiche la valeur en direct (par ex. <i>−40.0 dB SOFT BASS</i>) ainsi que les messages du LEARN et du MIDI Learn ; elle s'efface ensuite et la barre de presets revient."))
+f.append(P("Le <b>clic droit</b> ouvre le menu à l'endroit du clic : sur une commande, ses assignations MIDI ; ailleurs, le menu général (Plugin size, presets, LEARN, Gate settings, MIDI)."))
+f.append(KeepTogether([Spacer(1, 2 * mm), img(menus_img, W * 0.92), P("Menus clic droit : menu général, menu du potard THRESHOLD, sous-menu Gate settings.", "small")]))
+
+f.append(P("8. Presets", "h1"))
+f.append(P("Utilisez les flèches de la barre de presets, cliquez sur son nom, faites un clic droit n'importe où, ou passez par le menu de presets de votre DAW. Clic droit &gt; <b>Save user preset</b> enregistre jusqu'à 9 presets personnels, rappelés par <b>Load user preset</b>."))
+rows = [["PC", "Preset", "Seuil", "Mode · Instrument · Range", "Description"]]
+for i, (n, thr, hard, bass, rng, d) in enumerate(FACTORY):
+    rows.append([str(i + 1), "<b>" + n + "</b>", f"{thr} dB".replace("-", "−"), f"{'HARD' if hard else 'SOFT'} · {'Bass' if bass else 'Guitar'} · {RANGE[rng]}", d])
+f.append(table(rows, [8 * mm, 30 * mm, 14 * mm, 36 * mm, W - 88 * mm], small=True))
+
+f.append(P("9. Conseils d'utilisation", "h1"))
+f += bullets(["Dans Reaper, placez Ngate <b>en premier</b> dans la chaîne, juste après l'entrée de la guitare, <b>avant</b> votre simulateur d'ampli (par exemple avant Ampire, suivi d'Impulse pour le baffle) : il coupe le bruit de la guitare avant qu'il ne soit amplifié par la saturation.",
+              "Commencez toujours par <b>LEARN</b>, cordes étouffées, puis affinez au potard : si la fin des notes est coupée, baissez le seuil ou passez en SOFT ; si du souffle passe encore entre les riffs, montez-le ou passez en HARD.",
+              "Pour une 7 cordes en Sol ou plus bas, ou une basse, activez <b>BASS</b> : les notes graves ouvrent le gate franchement et ne sont pas coupées trop tôt.",
+              "Pour un son clair ou des effets d'ambiance, préférez SOFT avec un Range à −40 dB ou −20 dB : le gate reste inaudible."], "tip")
+tech = [["Format", "VST3 (Windows 64 bits, macOS universel)"], ["Canaux", "Mono ou stéréo (détection sur la plus forte des deux voies)"],
+        ["Latence", "aucune"], ["Seuil", "−95 à 0 dB, lissé sur 20 ms"],
+        ["SOFT", "attaque 2 ms, maintien 50 ms (BASS 90), relâchement 180 ms (BASS 300), hystérésis 6 dB, expansion 1:3"],
+        ["HARD", "attaque 0,3 ms (BASS 0,6), maintien 25 ms (BASS 60), relâchement 15 ms (BASS 35), hystérésis 3 dB"],
+        ["Détection", "Guitar : 75 Hz – 9 kHz ; Bass : 22 Hz – 6 kHz"], ["Range", "coupure totale, −40 dB ou −20 dB"],
+        ["LEARN", "mesure 1,5 s ; seuil = bruit + 3 dB (SOFT) ou + 5 dB (HARD), au plus −6 dB"],
+        ["Bypass", "fondu de 8 ms"],
+        ["MIDI", "tous les canaux ; MIDI Learn sur 6 commandes (rien d'assigné par défaut), Program Change 1-10"],
+        ["Fenêtre", "Plugin size 60 % / 75 % / 100 %, taille par défaut des nouvelles fenêtres au choix (60 % au départ), jusqu'à 150 %, jamais sous 60 %"]]
+f.append(KeepTogether([P("10. Caractéristiques techniques", "h1"), table(tech, [26 * mm, W - 26 * mm], header=False, small=True)]))
 
 def deco(c, doc):
     c.saveState()
-    c.setFillColor(ACC); c.rect(0, A4[1] - 2.5 * mm, A4[0], 2.5 * mm, stroke=0, fill=1)
+    c.setFillColor(DARK); c.rect(0, A4[1] - 6 * mm, A4[0], 6 * mm, stroke=0, fill=1)
+    c.setFillColor(ACC); c.rect(0, A4[1] - 6.8 * mm, A4[0], 0.8 * mm, stroke=0, fill=1)
     c.setFont("Pop", 7.5); c.setFillColor(GREY)
-    c.drawString(18 * mm, 10 * mm, "NGATE " + VERSION + " · NINE HANDS | DSP")
+    c.drawString(18 * mm, 10 * mm, "Ngate (NINE HANDS | DSP) · v" + VERSION)
     c.drawRightString(A4[0] - 18 * mm, 10 * mm, str(doc.page))
     c.restoreState()
 
+doc = BaseDocTemplate(OUT, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm, bottomMargin=18 * mm,
+                      title="NGATE - Notice v" + VERSION, author="NINE HANDS | DSP")
+# ---- Couverture « minimale » (modele 6) : gabarit fixe commun a toutes les notices ----
+COVER_NAME, COVER_SUB = "NGATE", "Noise gate"
+PEDAL_H, PEDAL_MAXW, PEDAL_TOP = 82 * mm, 115 * mm, 84 * mm
+LANG_TOP = 18 * mm
+NAME_TOP, NAME_PT = 194 * mm, 30
+SUB_TOP, SUB_PT = 208 * mm, 10
+LOGO_W, LOGO_BOTTOM = 38 * mm, 22 * mm
+BAND_H = 3 * mm
 def cover_bg(c, doc):
     c.saveState(); c.setFillColor(colors.black); c.rect(0, 0, A4[0], A4[1], stroke=0, fill=1)
-    c.setFillColor(ACC); c.rect(0, A4[1] - 3 * mm, A4[0], 3 * mm, stroke=0, fill=1); c.restoreState()
-
-doc = BaseDocTemplate(OUT, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm, bottomMargin=18 * mm,
-                      title="NGATE - User manual / Notice v" + VERSION, author="NINE HANDS | DSP")
+    c.setFillColor(ACC); c.rect(0, 0, A4[0], BAND_H, stroke=0, fill=1)
+    def line(text, top, font, size, cs, col):
+        w = pdfmetrics.stringWidth(text, font, size) + cs * (len(text) - 1)
+        t = c.beginText((A4[0] - w) / 2, A4[1] - top - size * 0.8); t.setFont(font, size); t.setCharSpace(cs)
+        t.setFillColor(col); t.textOut(text); c.drawText(t)
+    line("FRANÇAIS", LANG_TOP, "PopM", 8.5, 0, ACC_L)
+    ci = Image.open(cover); iw, ih = ci.size
+    cw_ = iw / 1.32; pad_ = int(cw_ * 0.16); ch_ = (ih - pad_) / 1.2
+    kk = min(PEDAL_H / ch_, PEDAL_MAXW / cw_)
+    dw, dh = iw * kk, ih * kk
+    y0 = A4[1] - (PEDAL_TOP + (PEDAL_H - ch_ * kk) / 2) + pad_ * kk
+    c.drawImage(cover, (A4[0] - dw) / 2, y0 - dh, dw, dh)
+    line(COVER_NAME, NAME_TOP - NAME_PT * 0.02, "Title", NAME_PT, NAME_PT * 0.5, colors.white)
+    line(COVER_SUB, SUB_TOP, "Pop", SUB_PT, 1.5, colors.HexColor("#BDC4B8"))
+    lw, lh = Image.open(LOGO_PNG).size
+    c.drawImage(LOGO_PNG, (A4[0] - LOGO_W) / 2, LOGO_BOTTOM, LOGO_W, LOGO_W * lh / lw, mask="auto")
+    c.restoreState()
 doc.addPageTemplates([PageTemplate(id="cover", frames=[Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="fc")], onPage=cover_bg),
                       PageTemplate(id="p", frames=[Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="f")], onPage=deco)])
-en = section("en"); fr = section("fr")
-en[-1:] = [NextPageTemplate("cover"), PageBreak()]
-doc.build(en + fr[:-1])
+doc.build(f)
+import shutil; shutil.rmtree(TMP, ignore_errors=True)
 print(OUT)

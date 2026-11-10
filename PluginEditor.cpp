@@ -1,164 +1,185 @@
 #include "PluginEditor.h"
-#include "WigaWindowSize.h"
 #include "BinaryData.h"
+#include "WigaWindowSize.h"
 
 using namespace juce;
 
 namespace
 {
-    Font font (float h, bool bold = true)
-    {
-        return Font (FontOptions (h, bold ? Font::bold : Font::plain));
-    }
+    // course du potard = couronne de points du visuel (-133,85 a +133,85 degres)
+    const float startAng = MathConstants<float>::twoPi - degreesToRadians (layout::dotAngle);
+    const float endAng   = MathConstants<float>::twoPi + degreesToRadians (layout::dotAngle);
 
-    // Positions dans le repere de reference 760 x 958 (meme cadrage qu'Echoflex),
-    // relevees sur le visuel NGATE photo (background.png = 1520 x 1916 = 2 x 760 x 958)
-    const Point<float> knobC   { 380.67f, 356.97f };
-    const float knobBox        = 150.0f;   // demi-cote de la zone du potard (chapeau 144,6)
-    const float startAng       = MathConstants<float>::twoPi - degreesToRadians (133.85f);   // comme la couronne du visuel
-    const float endAng         = MathConstants<float>::twoPi + degreesToRadians (133.85f);
-    // chapeau alu : centre de rotation reel (legerement decale de la couronne sur la photo)
-    const Point<float> capC    { 379.475f, 348.365f };
-    const float spriteHalf     = 144.25f;  // knob_light/dark.png : 577 px = 2 x 288.5 px du fond
-    const Point<float> spriteC { 143.975f, 143.865f };   // centre du chapeau dans le sprite (repere 760 x 958)
-    const float photoAngle     = degreesToRadians (-16.9f);   // position du repere sur la photo d'origine
-    const float ptrR0 = 65.6f, ptrR1 = 139.6f, ptrW = 6.2f;   // rainure du repere
+    const Colour accent (0xffec7a2c);          // orange de NOISE GATE : en-tetes de menu, LEARN, BASS
+    const Colour cream  (0xffefd9b0);          // chiffres de l'afficheur
+    const Colour dotOrange (0xffff8a1e), dotGreen (0xff36e05c);
+    const Colour barInk (0xffe8e8e6);
 
-    const float dotsR          = 175.57f;
-    const int   numDots        = 31;
+    const Rectangle<float> barRect = layout::presetRect;
+    constexpr float barFont = 23.0f, arrowW = 34.0f;
 
-    const Rectangle<float> readoutRect { 471.0f, 59.5f, 153.5f, 52.7f };
-
-    const Point<float> learnC  { 587.0f, 193.1f };
-    const Point<float> bassC   { 380.7f, 671.6f };
-    const float btnR           = 27.0f;     // bague exterieure des boutons LEARN / BASS
-    const float btnCapR        = 18.0f;     // poussoir
-
-    const Point<float> toggleC { 381.0f, 564.8f };                       // pivot du levier
-    const Rectangle<float> toggleRect  { 200.0f, 545.0f, 360.0f, 40.0f }; // SOFT ---[ ]--- HARD
-    // sprite du levier (photo) : pivot et bille dans l'image lever.png (pixels du fond 1520 x 1916)
-    const float leverPivotX = 8.7f, leverPivotY = 17.5f, leverBallL = 53.0f;
-
-    const Point<float> openC   { 245.6f, 670.3f };
-    const Point<float> gateC   { 514.1f, 671.0f };
-    const float ledR           = 7.6f;
-
-    const Point<float> footPos { 380.0f, 800.7f };
-    const float footR          = 50.0f;
-    const float footCapR       = 25.5f;
-
-    const Rectangle<float> statusRect { 140.0f, 861.0f, 480.0f, 52.0f };
-
-    const Colour cream   (0xffefd9b0);
-    const Colour dotOrange (0xffff8a1e);
-    const Colour dotGreen  (0xff36e05c);
-    const Colour orange  (0xffff7a2f);
-    const Colour grnCore (0xffe6ffe9);
-    const Colour grnMid  (0xff46e86a);
-    const Colour grnDeep (0xff0b7a24);
-    const Colour orgCore (0xffffe6cf);
-    const Colour orgMid  (0xffff7a2f);
-    const Colour orgDeep (0xffa83300);
-
-    float dotDb (int i)    { return NgateAudioProcessor::minThreshold
-                                    + (NgateAudioProcessor::maxThreshold - NgateAudioProcessor::minThreshold) * (float) i / (float) (numDots - 1); }
+    float dotDb (int i) { return NgateAudioProcessor::minThreshold + (NgateAudioProcessor::maxThreshold - NgateAudioProcessor::minThreshold) * (float) i / (float) (layout::numDots - 1); }
     float angleFor (float db)
     {
-        const float t = (db - NgateAudioProcessor::minThreshold) / (NgateAudioProcessor::maxThreshold - NgateAudioProcessor::minThreshold);
-        return startAng + (endAng - startAng) * jlimit (0.0f, 1.0f, t);
+        const float t = jlimit (0.0f, 1.0f, (db - NgateAudioProcessor::minThreshold) / (NgateAudioProcessor::maxThreshold - NgateAudioProcessor::minThreshold));
+        return startAng + (endAng - startAng) * t;
     }
     Point<float> onCircle (Point<float> c, float r, float a) { return { c.x + r * std::sin (a), c.y - r * std::cos (a) }; }
 
-    void glowDot (Graphics& g, Point<float> c, float r, float glowR, Colour col, float level)
-    {
-        if (level <= 0.003f) return;
-        ColourGradient gl (col.withAlpha (0.55f * level), c.x, c.y, col.withAlpha (0.0f), c.x + glowR, c.y, true);
-        g.setGradientFill (gl);
-        g.fillEllipse (c.x - glowR, c.y - glowR, glowR * 2.0f, glowR * 2.0f);
-        ColourGradient core (col.brighter (0.6f).withAlpha (level), c.x - r * 0.25f, c.y - r * 0.3f,
-                             col.darker (0.15f).withAlpha (level), c.x + r, c.y + r, true);
-        g.setGradientFill (core);
-        g.fillEllipse (c.x - r, c.y - r, r * 2.0f, r * 2.0f);
-    }
+    const char* const watchIds[4] = { "threshold", "hard", "bass", "range" };
 }
 
 //==============================================================================
-// POTARD THRESHOLD (vectoriel, mis en cache)
+// POTARD : calque usure + index (fourni par l'utilisateur), tourne autour du centre du chapeau
 //==============================================================================
-void ThresholdKnobLookAndFeel::prepare (int pixelSize)
+void ThresholdKnob::prepare (float physScale)
 {
-    // sprites de matiere mis a la taille d'affichage une seule fois (rotation fluide ensuite)
-    if (! lightSrc.isValid())
-    {
-        lightSrc = ImageCache::getFromMemory (BinaryData::knob_light_png, BinaryData::knob_light_pngSize);
-        darkSrc  = ImageCache::getFromMemory (BinaryData::knob_dark_png,  BinaryData::knob_dark_pngSize);
-    }
-    pixelSize = jmax (16, pixelSize);
-    if (pixelSize == scaledSize && lightScaled.isValid())
-        return;
-    scaledSize = pixelSize;
-    if (pixelSize >= lightSrc.getWidth())
-    {
-        lightScaled = lightSrc; darkScaled = darkSrc;
-    }
-    else
-    {
-        lightScaled = lightSrc.rescaled (pixelSize, pixelSize, Graphics::highResamplingQuality);
-        darkScaled  = darkSrc.rescaled  (pixelSize, pixelSize, Graphics::highResamplingQuality);
-    }
+    if (! top.isValid() || getWidth() <= 0) return;
+    const float sprite = (float) getWidth() * (layout::knobSprite / (layout::capR * 2.0f + 10.0f));
+    const int px = jmax (8, roundToInt (sprite * physScale));
+    if (topScaled.isValid() && topScaled.getWidth() == px) return;
+    topScaled = px >= top.getWidth() ? top : top.rescaled (px, px, Graphics::highResamplingQuality);
 }
 
-void ThresholdKnobLookAndFeel::drawRotarySlider (Graphics& g, int x, int y, int w, int h,
-                                                 float pos, float startAngle, float endAngle, Slider&)
+void ThresholdKnob::paint (Graphics& g)
 {
-    // Le chapeau tourne vraiment : sa matiere (rayures, taches, usure) et la rainure du repere tournent,
-    // tandis que les reflets coniques de l'usinage restent fixes sous la lumiere (ils sont dans le fond),
-    // exactement comme sur un vrai potard en alu brosse.
-    const float angle = startAngle + pos * (endAngle - startAngle);
-    const float s = (float) jmin (w, h) / (knobBox * 2.0f);     // pixels par unite du repere
-    g.addTransform (AffineTransform::scale (s).translated ((float) x + (float) w * 0.5f, (float) y + (float) h * 0.5f));
-    // ici (0, 0) = centre du chapeau, unites du repere 760 x 958
-
-    // anti-gel v2 : aucun rescale ici, les sprites sont mis a l'echelle par le timer de l'editeur
-    if (! lightSrc.isValid())
-        return;                            // sprites charges par rebuildCaches() (constructeur)
-    const Image& light = lightScaled.isValid() ? lightScaled : lightSrc;
-    const Image& dark  = darkScaled.isValid()  ? darkScaled  : darkSrc;
-    const float rot = angle - photoAngle;
-    const auto place = AffineTransform::scale (spriteHalf * 2.0f / (float) jmax (1, light.getWidth()))
-                         .translated (-spriteC.x, -spriteC.y)
-                         .rotated (rot);
+    const auto& img = topScaled.isValid() ? topScaled : top;
+    if (! img.isValid()) return;
+    const auto rp = getRotaryParameters();
+    const float pos = (float) valueToProportionOfLength (getValue());
+    const float a = rp.startAngleRadians + pos * (rp.endAngleRadians - rp.startAngleRadians);
+    const auto c = getLocalBounds().toFloat().getCentre();
+    const float side = (float) getWidth() * (layout::knobSprite / (layout::capR * 2.0f + 10.0f));
+    const float k = side / (float) img.getWidth();
     g.setImageResamplingQuality (Graphics::highResamplingQuality);
-    g.setOpacity (1.0f);
-    g.drawImageTransformed (dark,  place);
-    g.drawImageTransformed (light, place);
+    g.drawImageTransformed (img, AffineTransform::translation (-img.getWidth() * 0.5f, -img.getHeight() * 0.5f)
+                                     .scaled (k).rotated (a).translated (c.x, c.y));
+}
 
-    // rainure du repere
-    const auto p1 = onCircle ({}, ptrR0, angle), p2 = onCircle ({}, ptrR1, angle);
-    Path groove; groove.startNewSubPath (p1); groove.lineTo (p2);
-    const Point<float> dir { std::sin (angle), -std::cos (angle) };
-    Point<float> nrm { -dir.y, dir.x };
-    if (nrm.x + nrm.y > 0.0f) nrm = -nrm;            // cote tourne vers la lumiere (haut-gauche)
-    const float off = ptrW * 0.5f;
-
-    g.setColour (Colours::black.withAlpha (0.18f));
-    g.strokePath (groove, PathStrokeType (ptrW + 1.6f, PathStrokeType::curved, PathStrokeType::rounded));
-    g.setColour (Colour (0xff232426));
-    g.strokePath (groove, PathStrokeType (ptrW, PathStrokeType::curved, PathStrokeType::rounded));
-    // paroi cote lumiere : dans l'ombre (degrade gris) ; paroi opposee : arete sombre nette
-    Path wl; wl.startNewSubPath (p1 + nrm * (off - 0.9f)); wl.lineTo (p2 + nrm * (off - 0.9f));
-    g.setColour (Colour (0xff5d5f62).withAlpha (0.9f));
-    g.strokePath (wl, PathStrokeType (1.3f, PathStrokeType::curved, PathStrokeType::rounded));
-    Path wd; wd.startNewSubPath (p1 - nrm * (off - 0.6f)); wd.lineTo (p2 - nrm * (off - 0.6f));
-    g.setColour (Colour (0xff0e0f10));
-    g.strokePath (wd, PathStrokeType (1.1f, PathStrokeType::curved, PathStrokeType::rounded));
-    Path hl; hl.startNewSubPath (p1 - nrm * (off + 0.5f)); hl.lineTo (p2 - nrm * (off + 0.5f));
-    g.setColour (Colours::white.withAlpha (0.28f));
-    g.strokePath (hl, PathStrokeType (0.7f));
+bool ThresholdKnob::hitTest (int x, int y)
+{
+    return getLocalBounds().toFloat().getCentre().getDistanceFrom ({ (float) x, (float) y }) <= (float) getWidth() * 0.5f;
 }
 
 //==============================================================================
-// FOOTSWITCH
+// BOUTONS POUSSOIRS
+//==============================================================================
+bool PushButton::hitTest (int x, int y)
+{
+    return getLocalBounds().toFloat().getCentre().getDistanceFrom ({ (float) x, (float) y }) <= (float) getWidth() * 0.5f;
+}
+
+void PushButton::mouseDown (const MouseEvent& e)
+{
+    if (e.mods.isPopupMenu()) { if (onRightClick) onRightClick(); return; }
+    pressed = true; repaint();
+}
+
+void PushButton::mouseUp (const MouseEvent& e)
+{
+    if (! pressed) return;
+    pressed = false; repaint();
+    if (contains (e.getPosition()) && onClick) onClick();
+}
+
+void PushButton::paint (Graphics& g)
+{
+    const auto b = getLocalBounds().toFloat();
+    const auto c = b.getCentre();
+    const float k = b.getWidth() / ((layout::btnR + 10.0f) * 2.0f);     // pixels par unite
+    const float R = layout::btnR * k, cap = layout::btnCapR * k;
+    if (glow > 0.003f)
+    {
+        ColourGradient gl (accent.withAlpha (0.0f), c.x, c.y, accent.withAlpha (0.0f), c.x + b.getWidth() * 0.5f, c.y, true);
+        gl.addColour (R / (b.getWidth() * 0.5f) - 0.06, accent.withAlpha (0.0f));
+        gl.addColour (R / (b.getWidth() * 0.5f) + 0.03, accent.withAlpha (0.50f * glow));
+        g.setGradientFill (gl);
+        g.fillEllipse (b);
+        g.setColour (accent.withAlpha (0.85f * glow));
+        g.drawEllipse (c.x - R, c.y - R, R * 2.0f, R * 2.0f, 1.3f * k);
+    }
+    if (progress >= 0.0f)
+    {
+        Path arc;
+        arc.addCentredArc (c.x, c.y, R + 4.5f * k, R + 4.5f * k, 0.0f, 0.0f, MathConstants<float>::twoPi * progress, true);
+        g.setColour (accent);
+        g.strokePath (arc, PathStrokeType (2.2f * k, PathStrokeType::curved, PathStrokeType::rounded));
+    }
+    if (pressed)
+    {
+        g.setColour (Colours::black.withAlpha (0.38f));
+        g.fillEllipse (c.x - cap, c.y - cap, cap * 2.0f, cap * 2.0f);
+        ColourGradient in (Colours::black.withAlpha (0.5f), c.x, c.y - cap, Colours::black.withAlpha (0.0f), c.x, c.y - cap * 0.2f, false);
+        g.setGradientFill (in);
+        g.fillEllipse (c.x - cap, c.y - cap, cap * 2.0f, cap * 2.0f);
+    }
+    else if (isMouseOver())
+    {
+        g.setColour (Colours::white.withAlpha (0.05f));
+        g.fillEllipse (c.x - cap, c.y - cap, cap * 2.0f, cap * 2.0f);
+    }
+}
+
+//==============================================================================
+// INVERSEUR SOFT / HARD
+//==============================================================================
+LeverSwitch::LeverSwitch (RangedAudioParameter& p)
+    : attachment (p, [this] (float v)
+                  {
+                      const int nf = v > 0.5f ? 0 : 2;
+                      if (nf != frame)
+                      {
+                          frame = nf; shown = 1;                      // position du milieu ~55 ms
+                          transitionUntil = Time::getMillisecondCounterHiRes() + 55.0;
+                          repaint();
+                      }
+                  })
+{
+    attachment.sendInitialUpdate();
+    shown = frame;
+    setMouseCursor (MouseCursor::PointingHandCursor);
+}
+
+void LeverSwitch::tick (double now)
+{
+    if (shown != frame && now >= transitionUntil) { shown = frame; repaint(); }
+}
+
+void LeverSwitch::paint (Graphics& g)
+{
+    if (! strip.isValid()) return;
+    const int fs = strip.getWidth();
+    g.setImageResamplingQuality (Graphics::highResamplingQuality);
+    g.drawImage (strip, 0, 0, getWidth(), getHeight(), 0, shown * fs, fs, fs);   // meme rectangle pour les 3 images
+}
+
+bool LeverSwitch::hitTest (int x, int y)
+{
+    const auto c = getLocalBounds().toFloat().getCentre();
+    const float r = (float) getWidth() * (layout::togR / layout::togS);
+    return std::abs ((float) x - c.x) <= r * 1.7f && std::abs ((float) y - c.y) <= r * 1.1f;
+}
+
+void LeverSwitch::set (bool hard)
+{
+    if ((frame == 0) == hard) return;
+    attachment.setValueAsCompleteGesture (hard ? 1.0f : 0.0f);
+    if (onUserChange) onUserChange();
+}
+
+void LeverSwitch::mouseDown (const MouseEvent& e)
+{
+    if (e.mods.isPopupMenu()) { if (onRightClick) onRightClick(); return; }
+    set (frame != 0);
+}
+
+void LeverSwitch::mouseWheelMove (const MouseEvent&, const MouseWheelDetails& w)
+{
+    if (std::abs (w.deltaY) > 0.0f) set (w.deltaY < 0.0f);     // molette vers le bas = vers la droite (HARD)
+}
+
+//==============================================================================
+// FOOTSWITCH (fonctionnement d'Echoflex)
 //==============================================================================
 FootSwitchArea::FootSwitchArea (RangedAudioParameter& p)
     : attachment (p, [this] (float v) { value = v > 0.5f; repaint(); })
@@ -170,31 +191,31 @@ FootSwitchArea::FootSwitchArea (RangedAudioParameter& p)
 bool FootSwitchArea::hitTest (int x, int y)
 {
     const auto c = getLocalBounds().toFloat().getCentre();
-    return c.getDistanceFrom ({ (float) x, (float) y }) <= (float) getWidth() * 0.5f;
+    return c.getDistanceFrom ({ (float) x, (float) y }) <= (float) getWidth() * (layout::footR * 1.35f / layout::fsS);
 }
 
 void FootSwitchArea::paint (Graphics& g)
 {
-    if (pressed)
-    {
-        g.setColour (Colours::black.withAlpha (0.28f));
-        g.fillEllipse (getLocalBounds().toFloat().reduced ((float) getWidth() * 0.245f));
-    }
+    if (! pressed) return;
+    const auto b = getLocalBounds().toFloat();
+    const float r = b.getWidth() * (layout::footR / layout::fsS) * 0.98f;
+    const auto c = b.getCentre();
+    g.setColour (Colours::black.withAlpha (0.25f));
+    g.fillEllipse (c.x - r, c.y - r, r * 2.0f, r * 2.0f);
 }
 
 void FootSwitchArea::mouseDown (const MouseEvent& e)
 {
-    if (e.mods.isPopupMenu())
-        return;
-    pressed = true;
-    repaint();
+    if (e.mods.isPopupMenu()) { if (onRightClick) onRightClick(); return; }
+    pressed = true; repaint();
     attachment.setValueAsCompleteGesture (value ? 0.0f : 1.0f);
+    if (onUserChange) onUserChange();
 }
 
-void FootSwitchArea::mouseUp (const MouseEvent&)
+void FootSwitchArea::mouseUp (const MouseEvent& e)
 {
-    pressed = false;
-    repaint();
+    if (e.mods.isPopupMenu()) return;
+    pressed = false; repaint();
 }
 
 //==============================================================================
@@ -202,18 +223,30 @@ void FootSwitchArea::mouseUp (const MouseEvent&)
 //==============================================================================
 NgateAudioProcessorEditor::NgateAudioProcessorEditor (NgateAudioProcessor& p)
     : AudioProcessorEditor (&p), proc (p),
+      lever (*p.apvts.getParameter ("hard")),
       footswitch (*p.apvts.getParameter ("active"))
 {
     background = ImageCache::getFromMemory (BinaryData::background_png, BinaryData::background_pngSize);
-    leverImg   = ImageCache::getFromMemory (BinaryData::lever_png, BinaryData::lever_pngSize);
-    rightClickFwd.callback = [this] (Component* c) { showContextMenu (c == &threshold ? 0 : c == &footswitch ? 4 : -1); };
+    glowG = ImageCache::getFromMemory (BinaryData::glow_green_png, BinaryData::glow_green_pngSize);
+    glowO = ImageCache::getFromMemory (BinaryData::glow_orange_png, BinaryData::glow_orange_pngSize);
+    ledG  = ImageCache::getFromMemory (BinaryData::led_green_on_png, BinaryData::led_green_on_pngSize);
+    ledO  = ImageCache::getFromMemory (BinaryData::led_orange_on_png, BinaryData::led_orange_on_pngSize);
+    threshold.top = ImageCache::getFromMemory (BinaryData::knob_top_png, BinaryData::knob_top_pngSize);
+    lever.strip   = ImageCache::getFromMemory (BinaryData::toggle_strip_png, BinaryData::toggle_strip_pngSize);
+    medFace  = Typeface::createSystemTypefaceFor (BinaryData::PoppinsMedium_ttf,  BinaryData::PoppinsMedium_ttfSize);
+    boldFace = Typeface::createSystemTypefaceFor (BinaryData::PoppinsBold_ttf,    BinaryData::PoppinsBold_ttfSize);
+    lightFace = Typeface::createSystemTypefaceFor (BinaryData::PoppinsLight_ttf,  BinaryData::PoppinsLight_ttfSize);
+    regFace  = Typeface::createSystemTypefaceFor (BinaryData::PoppinsRegular_ttf, BinaryData::PoppinsRegular_ttfSize);
+    menuLnf.f = { regFace, medFace, boldFace };
+    if (auto xml = XmlDocument::parse (String::fromUTF8 (BinaryData::NineHandsLogo_svg, BinaryData::NineHandsLogo_svgSize)))
+        logo = Drawable::createFromSVG (*xml);
+    buildPrint();
 
+    rightClickFwd.callback = [this] { showContextMenu (0); };
     threshold.setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
     threshold.setTextBoxStyle (Slider::NoTextBox, false, 0, 0);
     threshold.setRotaryParameters (startAng, endAng, true);
     threshold.setMouseDragSensitivity (360);
-    threshold.setVelocityBasedMode (false);
-    threshold.setLookAndFeel (&lnf);
     threshold.setMouseCursor (MouseCursor::PointingHandCursor);
     threshold.addMouseListener (&rightClickFwd, false);
     threshold.onDragStart = [this] { proc.currentPreset = -1; };
@@ -221,67 +254,70 @@ NgateAudioProcessorEditor::NgateAudioProcessorEditor (NgateAudioProcessor& p)
     aThreshold = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, "threshold", threshold);
     threshold.setDoubleClickReturnValue (true, -60.0);
 
-    learnBtn.painter = [this] (Graphics& g, bool pr, bool ov) { paintLearn (g, pr, ov); };
-    learnBtn.onClick = [this]
-    {
-        if (proc.learning.load()) proc.cancelLearn();
-        else                      proc.startLearn();
-        showStatus();
-    };
+    learnBtn.onClick = [this] { if (proc.learning.load()) proc.cancelLearn(); else proc.startLearn(); showStatus(); };
     learnBtn.onRightClick = [this] { showContextMenu (3); };
     addAndMakeVisible (learnBtn);
-
-    bassBtn.painter = [this] (Graphics& g, bool pr, bool ov) { paintBass (g, pr, ov); };
     bassBtn.onClick = [this] { toggleParam ("bass"); };
     bassBtn.onRightClick = [this] { showContextMenu (2); };
     addAndMakeVisible (bassBtn);
 
-    // SOFT --[ switch ]-- HARD : clic sur le switch = bascule, clic sur SOFT ou HARD = choix direct
-    toggleArea.onClick = [this] (const MouseEvent& e)
-    {
-        const float s = (float) getHeight() / (float) baseH;
-        const float bx = (float) (toggleArea.getX() + e.x) / s;
-        if (std::abs (bx - toggleC.x) <= 34.0f) toggleParam ("hard");
-        else { setParamValue ("hard", bx > toggleC.x ? 1.0f : 0.0f); proc.currentPreset = -1; }
-        showStatus();
-    };
-    toggleArea.onRightClick = [this] { showContextMenu (1); };
-    addAndMakeVisible (toggleArea);
-
-    footswitch.addMouseListener (&rightClickFwd, false);
+    lever.onRightClick = [this] { showContextMenu (1); };
+    lever.onUserChange = [this] { proc.currentPreset = -1; };
+    addAndMakeVisible (lever);
+    footswitch.onRightClick = [this] { showContextMenu (4); };
     addAndMakeVisible (footswitch);
 
-    leverPos   = proc.apvts.getRawParameterValue ("hard")->load();
-    bassLevel  = proc.apvts.getRawParameterValue ("bass")->load();
-    powerLevel = proc.apvts.getRawParameterValue ("active")->load() > 0.5f ? 1.0f : 0.0f;
-    const char* ids[4] = { "threshold", "hard", "bass", "range" };
-    for (int i = 0; i < 4; ++i)
-        lastValues[i] = proc.apvts.getRawParameterValue (ids[i])->load();
+    for (int i = 0; i < 4; ++i) lastValues[i] = proc.apvts.getRawParameterValue (watchIds[i])->load();
+    lastPresetSeen = proc.currentPreset.load();
+    lastMidiCount = proc.midiCounter.load();
     lastLearnCount = proc.learnCounter.load();
+    powerLevel = proc.apvts.getRawParameterValue ("active")->load() > 0.5f ? 1.0f : 0.0f;
+    bassLevel = proc.apvts.getRawParameterValue ("bass")->load() > 0.5f ? powerLevel : 0.0f;
 
-    // Taille par defaut = taille minimale (impossible de reduire en dessous), comme Echoflex
-    const int defaultW = roundToInt ((float) defaultH * (float) baseW / (float) baseH);
+    const int defaultW = roundToInt ((float) defaultH * baseW / baseH);
     setResizable (true, true);
-    setResizeLimits (defaultW, defaultH, baseW * 3 / 2, baseH * 3 / 2);
-    if (auto* cons = getConstrainer())
-        cons->setFixedAspectRatio ((double) baseW / (double) baseH);
-    setOpaque (true);                      // anti-gel : l'hote ne redessine jamais ce qui est derriere la fenetre
+    setResizeLimits (defaultW, defaultH, roundToInt ((float) maxH * baseW / baseH), maxH);
+    if (auto* cons = getConstrainer()) cons->setFixedAspectRatio ((double) baseW / (double) baseH);
+    setOpaque (true);
     setSize (defaultW, defaultH);
-    // taille des nouvelles fenetres : celle choisie dans le menu « Default size (new windows) »
     setScaledHeight (sizeHeight (WigaWindowSize::defaultIndex (JucePlugin_Name, numSizes)));
     rebuildCaches();
-
     lastTime = Time::getMillisecondCounterHiRes();
     startTimerHz (30);
 }
 
 NgateAudioProcessorEditor::~NgateAudioProcessorEditor()
 {
+    PopupMenu::dismissAllActiveMenus();
     stopTimer();
     threshold.removeMouseListener (&rightClickFwd);
-    threshold.setLookAndFeel (nullptr);
-    footswitch.removeMouseListener (&rightClickFwd);
 }
+
+int NgateAudioProcessorEditor::sizeHeight (int idx)
+{
+    const int h[numSizes] = { (int) defaultH, roundToInt (refH * 0.75f), (int) refH };
+    return h[jlimit (0, numSizes - 1, idx)];
+}
+
+void NgateAudioProcessorEditor::setScaledHeight (int h)
+{
+    h = jlimit ((int) defaultH, (int) maxH, h);
+    setSize (roundToInt ((float) h * baseW / baseH), h);
+}
+
+Rectangle<int> NgateAudioProcessorEditor::scaled (Rectangle<float> r) const
+{
+    const float s = (float) getHeight() / baseH;
+    return r.transformedBy (AffineTransform::scale (s)).getSmallestIntegerContainer();
+}
+
+float NgateAudioProcessorEditor::physicalScale() const
+{
+    if (forcedScale > 0.0f) return forcedScale;
+    return jlimit (1.0f, 4.0f, (float) Component::getApproximateScaleFactorForComponent (this));
+}
+
+void NgateAudioProcessorEditor::showStatus() { statusUntil = Time::getMillisecondCounterHiRes() + 2500.0; }
 
 void NgateAudioProcessorEditor::setParamValue (const char* id, float plain)
 {
@@ -300,67 +336,132 @@ void NgateAudioProcessorEditor::toggleParam (const char* id)
     showStatus();
 }
 
-void NgateAudioProcessorEditor::showStatus()
+//==============================================================================
+// Serigraphie vectorielle (Poppins) : construite une fois en chemins, rendue dans un calque a la resolution de l'ecran
+//==============================================================================
+static Path textPath (const String& s, const Typeface::Ptr& face, float em, float track, float x, float y, float rotDeg, bool leftAnchor)
 {
-    statusUntil = Time::getMillisecondCounterHiRes() + 2500.0;
+    const Font font (FontOptions (face).withPointHeight (em));
+    float total = 0.0f;
+    for (int i = 0; i < s.length(); ++i)
+        total += GlyphArrangement::getStringWidth (font, String::charToString (s[i])) + (i > 0 ? track : 0.0f);
+    // centre vertical = milieu de la hauteur des capitales (comme le visuel)
+    GlyphArrangement h; h.addLineOfText (font, "H", 0.0f, 0.0f);
+    const auto hb = h.getBoundingBox (0, -1, true);
+    const float base = -(hb.getY() + hb.getHeight() * 0.5f);
+    GlyphArrangement ga;
+    float x0 = leftAnchor ? 0.0f : -total * 0.5f;
+    for (int i = 0; i < s.length(); ++i)
+    {
+        const String ch = String::charToString (s[i]);
+        ga.addLineOfText (font, ch, x0, base);
+        x0 += GlyphArrangement::getStringWidth (font, ch) + track;
+    }
+    Path p; ga.createPath (p);
+    p.applyTransform (AffineTransform::rotation (-rotDeg * MathConstants<float>::pi / 180.0f).translated (x, y));
+    return p;
 }
 
-int NgateAudioProcessorEditor::sizeHeight (int idx)
+void NgateAudioProcessorEditor::buildPrint()
 {
-    const int h[numSizes] = { (int) defaultH, roundToInt (baseH * 0.75f), (int) baseH };
-    return h[jlimit (0, numSizes - 1, idx)];
+    printPath.clear();
+    auto faceOf = [this] (int f) { return f == 1 ? boldFace : (f == 2 ? lightFace : medFace); };
+    for (const auto& t : layout::texts)
+        printPath.addPath (textPath (t.s, faceOf (t.font), t.em, t.track, t.x, t.y, t.rot, t.anchor == 1));
+    titlePath = textPath ("NGATE", boldFace, layout::titleEm, layout::titleTrack, layout::titlePos.x, layout::titlePos.y, 0.0f, false);
 }
 
-void NgateAudioProcessorEditor::setScaledHeight (int h)
+void NgateAudioProcessorEditor::renderPrint (Graphics& g)
 {
-    h = jmax ((int) defaultH, h);
-    setSize (roundToInt ((float) h * (float) baseW / (float) baseH), h);
-}
-
-Rectangle<int> NgateAudioProcessorEditor::scaled (Rectangle<float> r) const
-{
-    const float s = (float) getHeight() / (float) baseH;
-    return r.transformedBy (AffineTransform::scale (s)).getSmallestIntegerContainer();
-}
-
-float NgateAudioProcessorEditor::physicalScale() const
-{
-    return jlimit (1.0f, 4.0f, (float) Component::getApproximateScaleFactorForComponent (this));
-}
-
-void NgateAudioProcessorEditor::rebuildCaches (float sc)
-{
-    if (sc <= 0.0f)
-        sc = cacheScale > 0.0f ? cacheScale : physicalScale();
-    const int w = getWidth(), h = getHeight();
-    if (w <= 0 || h <= 0)
-        return;
-    if (w == cacheW && h == cacheH && std::abs (sc - cacheScale) < 0.01f && bgScaled.isValid())
-        return;
-
-    cacheW = w; cacheH = h; cacheScale = sc;
-    const int pw = roundToInt ((float) w * sc), ph = roundToInt ((float) h * sc);
-    bgScaled = (pw >= background.getWidth()) ? background
-                                             : background.rescaled (pw, ph, Graphics::highResamplingQuality);
-    lnf.physScale = sc;
-    lnf.prepare (roundToInt (spriteHalf * 2.0f * ((float) h / (float) baseH) * sc));   // sprites du potard
-    repaint();
+    // textes (chacun dans sa couleur)
+    auto faceOf = [this] (int f) { return f == 1 ? boldFace : (f == 2 ? lightFace : medFace); };
+    for (const auto& t : layout::texts)
+    {
+        g.setColour (Colour (t.colour).withAlpha (0.94f));
+        g.fillPath (textPath (t.s, faceOf (t.font), t.em, t.track, t.x, t.y, t.rot, t.anchor == 1));
+    }
+    for (const auto& r : layout::rules)
+    {
+        g.setColour (Colour (0xffd6d6d3).withAlpha (0.88f));
+        g.fillRect (Rectangle<float> (r.x0, r.y - r.w * 0.5f, r.x1 - r.x0, r.w));
+    }
+    // NGATE en relief : ombre portee douce, face metal brossee (degrade vertical), arete claire en haut a gauche
+    {
+        const auto b = titlePath.getBounds();
+        DropShadow (Colours::black.withAlpha (0.8f), 3, { 1, 2 }).drawForPath (g, titlePath);
+        ColourGradient face (Colour (0xffe6e6e3), b.getX(), b.getY(), Colour (0xff9a9b9c), b.getX(), b.getBottom(), false);
+        face.addColour (0.45, Colour (0xffc9cac9));
+        face.addColour (0.55, Colour (0xffb3b4b4));
+        g.setGradientFill (face);
+        g.fillPath (titlePath);
+        Graphics::ScopedSaveState ss (g);
+        g.reduceClipRegion (titlePath);
+        g.setColour (Colours::white.withAlpha (0.55f));
+        g.strokePath (titlePath, PathStrokeType (0.9f), AffineTransform::translation (0.5f, 0.6f));
+        g.setColour (Colours::black.withAlpha (0.45f));
+        g.strokePath (titlePath, PathStrokeType (0.9f), AffineTransform::translation (-0.5f, -0.6f));
+    }
+    if (logo != nullptr)
+    {
+        const auto vb = logo->getDrawableBounds();
+        const float w = layout::logoW, h = w * vb.getHeight() / jmax (1.0f, vb.getWidth());
+        logo->drawWithin (g, { layout::logoPos.x - w * 0.5f, layout::logoPos.y - h * 0.5f, w, h }, RectanglePlacement::centred, 0.92f);
+    }
+    // couronne de points : perles eteintes (allumees dessinees en direct)
+    for (int i = 0; i < layout::numDots; ++i)
+    {
+        const auto c = onCircle (layout::knobPos, layout::dotsR, angleFor (dotDb (i)));
+        g.setColour (Colours::black.withAlpha (0.45f));
+        g.fillEllipse (c.x - 2.0f, c.y - 1.5f, 4.6f, 4.6f);
+        ColourGradient pg (Colour (0xffd8d8d5), c.x - 0.8f, c.y - 0.9f, Colour (0xff76767a), c.x + 2.2f, c.y + 2.2f, true);
+        g.setGradientFill (pg);
+        g.fillEllipse (c.x - 2.2f, c.y - 2.2f, 4.4f, 4.4f);
+    }
 }
 
 //==============================================================================
-// Anti-gel de la fenetre (Windows) : JUCE 8 dessine par defaut avec Direct2D (carte graphique).
-// Avec certains pilotes (Intel notamment) la fenetre du plugin cesse de se rafraichir alors que
-// le DAW continue de tourner. Le moteur logiciel est stable partout et largement assez rapide ici.
-//
-// Anti-gel v2 (NINE HANDS | DSP) :
-//  1. moteur de rendu logiciel force sur Windows, applique a chaque nouvelle fenetre hote (peer)
-//     et reverifie toutes les secondes, jamais en boucle ;
-//  2. aucun calcul lourd dans paint() : les caches d'images (fond, sprites du potard) sont reconstruits
-//     par le timer seulement, apres stabilisation de la taille ou quand l'echelle d'affichage change
-//     (au plus toutes les 250 ms) ;
-//  3. chien de garde : si un redessin demande n'est pas arrive au bout de 1,5 s alors que la fenetre est
-//     visible, le moteur de rendu est reapplique et toute la fenetre est redessinee ;
-//  4. cote audio : aucun appel a l'hote depuis le thread audio (voir PluginProcessor).
+// Caches (reconstruits par le timer seulement : anti-gel v2)
+//==============================================================================
+void NgateAudioProcessorEditor::rebuildCaches (float sc)
+{
+    if (sc <= 0.0f) sc = cacheScale > 0.0f ? cacheScale : physicalScale();
+    const int w = getWidth(), h = getHeight();
+    if (w <= 0 || h <= 0) return;
+    if (w == cacheW && h == cacheH && std::abs (sc - cacheScale) < 0.01f && bgScaled.isValid()) return;
+    cacheW = w; cacheH = h; cacheScale = sc;
+    const int pw = roundToInt ((float) w * sc), ph = roundToInt ((float) h * sc);
+    bgScaled = (pw >= background.getWidth()) ? background : background.rescaled (pw, ph, Graphics::highResamplingQuality);
+    printLayer = Image (Image::ARGB, pw, ph, true);
+    {
+        Graphics g (printLayer);
+        g.addTransform (AffineTransform::scale ((float) ph / baseH));
+        renderPrint (g);
+    }
+    threshold.prepare (sc);
+    repaint();
+}
+
+void NgateAudioProcessorEditor::resized()
+{
+    // anti-gel : jamais de setSize ici
+    const float kr = layout::capR + 5.0f;
+    threshold.setBounds (scaled ({ layout::knobPos.x - kr, layout::knobPos.y - kr, kr * 2.0f, kr * 2.0f }));
+    const float bb = layout::btnR + 10.0f;
+    learnBtn.setBounds (scaled ({ layout::learnPos.x - bb, layout::learnPos.y - bb, bb * 2.0f, bb * 2.0f }));
+    bassBtn.setBounds  (scaled ({ layout::bassPos.x - bb,  layout::bassPos.y - bb,  bb * 2.0f, bb * 2.0f }));
+    {
+        const float s = (float) getHeight() / baseH, hs = layout::togS * 0.5f;
+        const int side = roundToInt (layout::togS * s);
+        lever.setBounds (roundToInt ((layout::togglePos.x - hs) * s), roundToInt ((layout::togglePos.y - hs) * s), side, side);
+    }
+    const float fr = layout::fsS * 0.5f;
+    footswitch.setBounds (scaled ({ layout::fsPos.x - fr, layout::fsPos.y - fr, fr * 2.0f, fr * 2.0f }));
+    resizeSettle = 4;
+}
+
+//==============================================================================
+// Anti-gel v2
+//==============================================================================
 void NgateAudioProcessorEditor::useSoftwareRenderer()
 {
     auto* peer = getPeer();
@@ -370,23 +471,13 @@ void NgateAudioProcessorEditor::useSoftwareRenderer()
     {
         int sw = peer->getAvailableRenderingEngines().indexOf ("Software Renderer");
         if (sw < 0) sw = 0;
-        if (peer->getCurrentRenderingEngine() != sw)
-            peer->setCurrentRenderingEngine (sw);
+        if (peer->getCurrentRenderingEngine() != sw) peer->setCurrentRenderingEngine (sw);
     }
    #endif
 }
 
-void NgateAudioProcessorEditor::parentHierarchyChanged()
-{
-    useSoftwareRenderer();
-}
-
-void NgateAudioProcessorEditor::visibilityChanged()
-{
-    useSoftwareRenderer();
-    if (isShowing())
-        repaint();
-}
+void NgateAudioProcessorEditor::parentHierarchyChanged() { useSoftwareRenderer(); }
+void NgateAudioProcessorEditor::visibilityChanged()      { useSoftwareRenderer(); if (isShowing()) repaint(); }
 
 void NgateAudioProcessorEditor::askRepaint (Rectangle<int> r)
 {
@@ -394,75 +485,46 @@ void NgateAudioProcessorEditor::askRepaint (Rectangle<int> r)
     repaint (r);
 }
 
-void NgateAudioProcessorEditor::resized()
-{
-    threshold.setBounds (scaled ({ capC.x - knobBox, capC.y - knobBox, knobBox * 2.0f, knobBox * 2.0f }));
-    const float bb = btnR + 10.0f;
-    learnBtn.setBounds (scaled ({ learnC.x - bb, learnC.y - bb, bb * 2.0f, bb * 2.0f }));
-    bassBtn.setBounds  (scaled ({ bassC.x  - bb, bassC.y  - bb, bb * 2.0f, bb * 2.0f }));
-    toggleArea.setBounds (scaled (toggleRect));
-    footswitch.setBounds (scaled ({ footPos.x - footR, footPos.y - footR, footR * 2.0f, footR * 2.0f }));
-
-    // anti-gel : jamais de setSize ici (les limites du constrainer suffisent)
-    resizeSettle = 4;   // on attend que la taille se stabilise avant de refaire les caches
-}
-
 //==============================================================================
 // Textes
 //==============================================================================
 String NgateAudioProcessorEditor::readoutText() const
 {
-    if (proc.learning.load())
-        return "LEARN";
+    if (proc.learning.load()) return "LEARN";
     return String (proc.apvts.getRawParameterValue ("threshold")->load(), 1);
 }
 
 String NgateAudioProcessorEditor::buildStatusLine() const
 {
     auto raw = [this] (const char* id) { return proc.apvts.getRawParameterValue (id)->load(); };
-    if (learnLineUntil > 0.0 && Time::getMillisecondCounterHiRes() < learnLineUntil)
-        return learnLine;
-    if (proc.learning.load())
-        return "LEARNING NOISE FLOOR - mute the strings";
-
-    static const char* ranges[] = { "FULL MUTE", "RANGE -40 dB", "RANGE -20 dB" };
-    return "THRESHOLD " + String (raw ("threshold"), 1) + " dB   "
-           + (raw ("hard") > 0.5f ? "HARD" : "SOFT") + "   "
-           + (raw ("bass") > 0.5f ? "BASS" : "GUITAR") + "   "
-           + ranges[jlimit (0, 2, roundToInt (raw ("range")))];
+    if (proc.learning.load()) return "LEARN  mute the strings";
+    if (learnDone > 0.0f)
+        return "Noise " + String (proc.learnedNoiseDb.load(), 1) + " dB  >  " + String (raw ("threshold"), 1) + " dB";
+    static const char* ranges[] = { "", "  -40 dB", "  -20 dB" };
+    String s = String (raw ("threshold"), 1) + " dB  " + (raw ("hard") > 0.5f ? "HARD" : "SOFT")
+             + (raw ("bass") > 0.5f ? "  BASS" : "") + ranges[jlimit (0, 2, roundToInt (raw ("range")))];
+    if (raw ("active") < 0.5f) s = "BYPASS";
+    return s;
 }
 
 String NgateAudioProcessorEditor::buildPresetLine() const
 {
-    String s = "IN " + (proc.inputDb.load() < -99.0f ? String ("-inf") : String (proc.inputDb.load(), 1)) + " dB";
-    s << "   GATE " << (proc.gainDb.load() > -0.5f ? String ("OPEN") : String (proc.gainDb.load() <= -99.0f ? "CLOSED" : String (proc.gainDb.load(), 0) + " dB"));
-
-    if (proc.learnCounter.load() > 0 && learnDone > 0.0f)
-        s = "Noise floor " + String (proc.learnedNoiseDb.load(), 1) + " dB  ->  threshold "
-            + String (proc.apvts.getRawParameterValue ("threshold")->load(), 1) + " dB";
-
-    if (proc.apvts.getRawParameterValue ("active")->load() < 0.5f)
-        s << "  |  BYPASS";
-
     const int cp = proc.currentPreset.load();
+    String s;
     if (cp >= 0 && cp < NgateAudioProcessor::getNumFactoryPresets())
-        s << "  |  P" << (cp + 1) << " " << NgateAudioProcessor::getFactoryPreset (cp).name;
-    else if (cp > 100)
-        s << "  |  USER " << (cp - 100);
-
-    const int cc = proc.lastMidiCC.load();
-    if (cc >= 0)       s << "  |  CC" << cc << "=" << proc.lastMidiValue.load();
-    else if (cc == -2) s << "  |  PC " << proc.lastMidiProgram.load();
-
+        s << (cp + 1) << "  " << NgateAudioProcessor::getFactoryPreset (cp).name;
+    else if (cp > 100) s << "User " << (cp - 100);
+    else               s << "Edited";
+    if (proc.apvts.getRawParameterValue ("active")->load() < 0.5f) s << "  (bypass)";
     return s;
 }
 
 int NgateAudioProcessorEditor::litDots() const
 {
     int n = 0;
-    for (int i = 0; i < numDots; ++i)
+    for (int i = 0; i < layout::numDots; ++i)
         if (dotDb (i) <= meterDb) n = i + 1;
-    return n;
+    return powerLevel > 0.5f ? n : 0;
 }
 
 //==============================================================================
@@ -470,159 +532,104 @@ void NgateAudioProcessorEditor::timerCallback()
 {
     const double now = Time::getMillisecondCounterHiRes();
     const double dt = jlimit (0.0, 0.1, (now - lastTime) * 0.001);
-    lastTime = now;
-    phase += dt;
-
-    // au cas ou la fenetre a ete recreee par l'hote (changement d'ecran, d'echelle...) : au plus 1 fois par seconde
+    lastTime = now; phase += dt;
     if (getPeer() != lastPeer || now - lastRendererCheckMs > 1000.0) { lastRendererCheckMs = now; useSoftwareRenderer(); }
 
-    // caches : reconstruits ici seulement (jamais dans paint)
-    if (resizeSettle > 0 && --resizeSettle == 0)
-        rebuildCaches();
+    if (resizeSettle > 0 && --resizeSettle == 0) rebuildCaches();
     else if (resizeSettle == 0 && now - lastScaleCheckMs > 250.0)
     {
         lastScaleCheckMs = now;
         const float sc = physicalScale();
-        if (std::abs (sc - cacheScale) > 0.01f)
-            rebuildCaches (sc);
+        if (std::abs (sc - cacheScale) > 0.01f) rebuildCaches (sc);
     }
-
-    // chien de garde : un redessin demande n'arrive pas -> on relance le moteur de rendu et on redessine tout
     if (repaintAskedMs > 0.0 && isShowing() && now - repaintAskedMs > 1500.0 && lastPaintMs < repaintAskedMs)
     {
-        repaintAskedMs = 0.0;
-        lastPeer = nullptr;
-        useSoftwareRenderer();
-        repaint();
+        repaintAskedMs = 0.0; lastPeer = nullptr;
+        useSoftwareRenderer(); repaint();
     }
 
+    lever.tick (now);
     auto raw = [this] (const char* id) { return proc.apvts.getRawParameterValue (id)->load(); };
 
+    // ligne d'etat : seulement quand un reglage bouge ; puis la barre de presets revient
+    for (int i = 0; i < 4; ++i)
+    {
+        const float v = raw (watchIds[i]);
+        if (std::abs (v - lastValues[i]) > 1.0e-4f) { lastValues[i] = v; showStatus(); learnDone = 0.0f; }
+    }
+    if (threshold.isMouseButtonDown()) showStatus();
+    const int cp = proc.currentPreset.load();
+    if (cp != lastPresetSeen) { lastPresetSeen = cp; if (cp >= 0) statusUntil = 0.0; }
     const int mc = proc.midiCounter.load();
-    if (mc != lastMidiCount) { lastMidiCount = mc; midiFlash = 8; showStatus(); }
+    if (mc != lastMidiCount) { lastMidiCount = mc; midiFlash = 8; }
     if (midiFlash > 0) --midiFlash;
 
-    // MIDI Learn : attente puis confirmation 2 s dans la ligne d'etat
-    {
-        const int learned = proc.lastLearned.exchange (-1);
-        const int lt = proc.learnTarget.load();
-        if (learned >= 0)
-        {
-            learnLine = String (NgateAudioProcessor::learnDef (learned).name) + " = CC " + String (proc.ccMap[learned].load());
-            learnLineUntil = now + 2000.0;
-            statusUntil = jmax (statusUntil, learnLineUntil);
-        }
-        else if (lt >= 0)
-        {
-            learnLine = "MIDI LEARN: move a control for " + String (NgateAudioProcessor::learnDef (lt).name);
-            learnLineUntil = now + 200.0;
-            statusUntil = jmax (statusUntil, now + 400.0);
-        }
-    }
-
-    // fin d'un LEARN : la valeur flashe
     const int lc = proc.learnCounter.load();
     if (lc != lastLearnCount) { lastLearnCount = lc; learnDone = 1.0f; statusUntil = now + 4000.0; }
-    learnDone = jmax (0.0f, learnDone - (float) dt * 0.3f);
+    learnDone = jmax (0.0f, learnDone - (float) dt * 0.25f);
+    if (proc.learning.load()) showStatus();
 
-    // ligne d'etat : n'apparait que lorsqu'un reglage bouge, reste 2,5 s puis s'efface
+    const int lt = proc.learnTarget.load();
+    const int learned = proc.lastLearned.exchange (-1);
+    if (learned >= 0)
     {
-        const char* ids[4] = { "threshold", "hard", "bass", "range" };
-        for (int i = 0; i < 4; ++i)
-        {
-            const float v = raw (ids[i]);
-            if (std::abs (v - lastValues[i]) > 1.0e-4f) { lastValues[i] = v; showStatus(); }
-        }
-        if (threshold.isMouseButtonDown() || proc.learning.load())
-            showStatus();
-
-        const float target = now < statusUntil ? 1.0f : 0.0f;
-        statusAlpha += (target - statusAlpha) * (target > statusAlpha ? 0.45f : 0.12f);
-        if (statusAlpha < 0.005f) statusAlpha = 0.0f;
-        if (statusAlpha > 0.995f) statusAlpha = 1.0f;
+        learnLine = String (NgateAudioProcessor::learnDef (learned).name) + " = CC " + String (proc.ccMap[learned].load());
+        learnLineUntil = now + 2000.0; statusUntil = jmax (statusUntil, learnLineUntil);
+    }
+    else if (lt >= 0)
+    {
+        learnLine = "MIDI LEARN  " + String (NgateAudioProcessor::learnDef (lt).name);
+        learnLineUntil = now + 200.0; statusUntil = jmax (statusUntil, now + 200.0);
     }
 
-    // tout s'eteint en bypass (couronne, LED, BASS, afficheur attenue)
-    const float powTarget = raw ("active") > 0.5f ? 1.0f : 0.0f;
-    powerLevel += (powTarget - powerLevel) * (powTarget > powerLevel ? 0.5f : 0.3f);
-    if (std::abs (powTarget - powerLevel) < 0.003f) powerLevel = powTarget;
+    const float target = now < statusUntil ? 1.0f : 0.0f;
+    statusAlpha += (target - statusAlpha) * (target > statusAlpha ? 0.45f : 0.30f);
+    if (statusAlpha < 0.005f) statusAlpha = 0.0f;
+    if (statusAlpha > 0.995f) statusAlpha = 1.0f;
 
-    // couronne de points = vumetre d'entree (montee rapide, retombee douce)
+    // bypass : couronne, LED, BASS s'eteignent, l'afficheur baisse
+    const float pT = raw ("active") > 0.5f ? 1.0f : 0.0f;
+    powerLevel += (pT - powerLevel) * (pT > powerLevel ? 0.45f : 0.28f);
+    if (std::abs (pT - powerLevel) < 0.003f) powerLevel = pT;
+
     const float in = proc.inputDb.load();
     meterDb = in > meterDb ? in : meterDb + (in - meterDb) * 0.25f;
-    if (powerLevel < 0.5f) meterDb = -120.0f;
 
-    // LED : OPEN (vert) suit le gain du gate, GATE (orange) l'attenuation
     const float openAmt = jlimit (0.0f, 1.0f, 1.0f + proc.gainDb.load() / 24.0f);
-    openLevel += (openAmt * powerLevel - openLevel) * 0.6f;
-    gateLevel += ((1.0f - openAmt) * powerLevel - gateLevel) * 0.6f;
-    for (auto* v : { &openLevel, &gateLevel })
-        if (*v < 0.003f) *v = 0.0f;
-
-    // levier SOFT / HARD (anime), bouton BASS
-    leverPos += (raw ("hard") - leverPos) * 0.45f;
-    if (std::abs (raw ("hard") - leverPos) < 0.002f) leverPos = raw ("hard");
-    const float bassTarget = raw ("bass") > 0.5f ? powerLevel : 0.0f;
-    bassLevel += (bassTarget - bassLevel) * 0.35f;
-    if (std::abs (bassTarget - bassLevel) < 0.003f) bassLevel = bassTarget;
-
-    // LEARN : pulsation pendant la mesure
+    auto fade = [] (float& v, float t) { v += (t - v) * (t > v ? 0.45f : 0.28f); if (std::abs (t - v) < 0.003f) v = t; };
+    fade (openLevel, openAmt * powerLevel);
+    fade (gateLevel, (1.0f - openAmt) * powerLevel);
+    fade (bassLevel, raw ("bass") > 0.5f ? powerLevel : 0.0f);
     const float lg = proc.learning.load() ? 0.55f + 0.45f * (float) std::sin (phase * 9.0) : 0.0f;
     learnGlow += (lg - learnGlow) * 0.5f;
-    if (std::abs (lg - learnGlow) < 0.003f) learnGlow = lg;
 
-    // --- on ne redessine que ce qui a change ---
+    // ne redessiner que ce qui change
     const int dots = litDots();
-    if (dots != drawnDots || std::abs (powerLevel - drawnPower) > 0.002f)
+    if (dots != drawnDots || std::abs (powerLevel - drawnPower) > 0.003f)
     {
         drawnDots = dots;
-        askRepaint (scaled ({ knobC.x - dotsR - 14.0f, knobC.y - dotsR - 14.0f, (dotsR + 14.0f) * 2.0f, (dotsR + 14.0f) * 2.0f }));
+        const float r = layout::dotsR + 14.0f;
+        askRepaint (scaled ({ layout::knobPos.x - r, layout::knobPos.y - r, r * 2.0f, r * 2.0f }));
     }
-    if (std::abs (powerLevel - drawnPower) > 0.002f)
+    if (std::abs (powerLevel - drawnPower) > 0.003f || readoutText() != drawnReadout || learnDone > 0.0f || proc.learning.load())
     {
-        drawnPower = powerLevel;
-        askRepaint (scaled (readoutRect.expanded (4.0f)));
+        drawnPower = powerLevel; drawnReadout = readoutText();
+        askRepaint (scaled (layout::readoutRect.expanded (4.0f)));
     }
-    if (readoutText() != drawnReadout || learnDone > 0.0f)
-    {
-        drawnReadout = readoutText();
-        askRepaint (scaled (readoutRect.expanded (4.0f)));
-    }
-    if (std::abs (openLevel - drawnOpen) > 0.002f)
-    {
-        drawnOpen = openLevel;
-        askRepaint (scaled ({ openC.x - 28.0f, openC.y - 28.0f, 56.0f, 56.0f }));
-    }
-    if (std::abs (gateLevel - drawnGate) > 0.002f)
-    {
-        drawnGate = gateLevel;
-        askRepaint (scaled ({ gateC.x - 28.0f, gateC.y - 28.0f, 56.0f, 56.0f }));
-    }
-    if (std::abs (leverPos - drawnLever) > 0.002f)
-    {
-        drawnLever = leverPos;
-        askRepaint (scaled ({ toggleC.x - 50.0f, toggleC.y - 16.0f, 100.0f, 36.0f }));
-    }
-    if (std::abs (bassLevel - drawnBass) > 0.002f)
-    {
-        drawnBass = bassLevel;
-        bassBtn.repaint();
-    }
-    if (std::abs (learnGlow - drawnLearn) > 0.002f || proc.learning.load() || learnDone > 0.0f)
-    {
-        drawnLearn = learnGlow;
-        learnBtn.repaint();
-    }
+    if (std::abs (openLevel - drawnOpen) > 0.003f) { drawnOpen = openLevel; askRepaint (scaled (layout::glowGreenRect)); }
+    if (std::abs (gateLevel - drawnGate) > 0.003f) { drawnGate = gateLevel; askRepaint (scaled (layout::glowOrangeRect)); }
 
-    const auto newStatus = buildStatusLine();
-    const auto newPreset = buildPresetLine();
-    const bool textChanged = newStatus != lastStatus || newPreset != lastPreset;
-    lastStatus = newStatus;
-    lastPreset = newPreset;
-    if (std::abs (statusAlpha - drawnStatus) > 0.002f || (statusAlpha > 0.0f && (textChanged || midiFlash > 0)))
+    const float lgv = jmax (learnGlow, learnDone * 0.8f);
+    const float lp = proc.learning.load() ? proc.learnProgress.load() : -1.0f;
+    if (std::abs (learnBtn.glow - lgv) > 0.003f || std::abs (learnBtn.progress - lp) > 0.002f) { learnBtn.glow = lgv; learnBtn.progress = lp; learnBtn.repaint(); }
+    if (std::abs (bassBtn.glow - bassLevel) > 0.003f) { bassBtn.glow = bassLevel; bassBtn.repaint(); }
+
+    const auto sl = (learnLineUntil > 0.0 && now < learnLineUntil + 800.0) ? learnLine : buildStatusLine();
+    const auto pl = buildPresetLine();
+    if (std::abs (statusAlpha - drawnStatus) > 0.003f || sl != statusLine || pl != presetLine || hoverZone != drawnHover || midiFlash > 0)
     {
-        drawnStatus = statusAlpha;
-        askRepaint (scaled (statusRect.expanded (4.0f)));
+        drawnStatus = statusAlpha; statusLine = sl; presetLine = pl; drawnHover = hoverZone;
+        askRepaint (scaled (barRect.expanded (3.0f)));
     }
 }
 
@@ -631,283 +638,239 @@ void NgateAudioProcessorEditor::timerCallback()
 //==============================================================================
 void NgateAudioProcessorEditor::drawMeter (Graphics& g)
 {
+    if (powerLevel <= 0.003f) return;
     const float thr = proc.apvts.getRawParameterValue ("threshold")->load();
-
-    for (int i = 0; i < numDots; ++i)
+    const int n = litDots();
+    for (int i = 0; i < n; ++i)
     {
         const float db = dotDb (i);
-        const auto c = onCircle (knobC, dotsR, angleFor (db));
-        // point eteint (perle claire mate, comme sur le visuel)
-        g.setColour (Colours::black.withAlpha (0.4f));
-        g.fillEllipse (c.x - 2.0f, c.y - 1.5f, 4.6f, 4.6f);
-        ColourGradient pg (Colour (0xffd8d8d6), c.x - 0.7f, c.y - 0.8f, Colour (0xff7a7a78), c.x + 2.2f, c.y + 2.2f, true);
-        g.setGradientFill (pg);
-        g.fillEllipse (c.x - 2.2f, c.y - 2.2f, 4.4f, 4.4f);
-        if (db <= meterDb && powerLevel > 0.0f)
-            glowDot (g, c, 3.9f, 10.5f, db < thr ? dotOrange : dotGreen, powerLevel);
+        const auto c = onCircle (layout::knobPos, layout::dotsR, angleFor (db));
+        const auto col = db < thr ? dotOrange : dotGreen;
+        const float gr = 10.5f, r = 3.9f;
+        ColourGradient gl (col.withAlpha (0.42f * powerLevel), c.x, c.y, col.withAlpha (0.0f), c.x + gr, c.y, true);
+        g.setGradientFill (gl);
+        g.fillEllipse (c.x - gr, c.y - gr, gr * 2.0f, gr * 2.0f);
+        ColourGradient core (col.brighter (0.6f).withAlpha (powerLevel), c.x - r * 0.25f, c.y - r * 0.3f,
+                             col.darker (0.15f).withAlpha (powerLevel), c.x + r, c.y + r, true);
+        g.setGradientFill (core);
+        g.fillEllipse (c.x - r, c.y - r, r * 2.0f, r * 2.0f);
+        g.setColour (Colours::white.withAlpha (0.75f * powerLevel));
+        g.fillEllipse (c.x - 1.6f, c.y - 1.8f, 2.2f, 2.0f);
     }
-
-}
-
-void NgateAudioProcessorEditor::drawReadout (Graphics& g)
-{
-    Graphics::ScopedSaveState ss (g);
-    g.reduceClipRegion (readoutRect.toNearestInt());
-
-    const auto text = readoutText();
-    const bool learning = proc.learning.load();
-    const float dim = 0.28f + 0.72f * powerLevel;
-    Colour c = learning ? orange : cream;
-    if (learnDone > 0.0f && ! learning)
-        c = cream.interpolatedWith (orange, learnDone * (0.5f + 0.5f * (float) std::sin (phase * 14.0)));
-
-    auto r = readoutRect.reduced (10.0f, 4.0f);
-    g.setFont (font (34.0f, true));
-    // halo discret
-    g.setColour (c.withAlpha (0.18f * dim));
-    g.drawText (text, r.translated (0.0f, 1.5f), Justification::centredRight);
-    g.setColour (c.withAlpha (dim));
-    g.drawText (text, r, Justification::centredRight);
-
-    if (learning)
-    {
-        const float pr = proc.learnProgress.load();
-        const auto bar = readoutRect.reduced (10.0f, 0.0f).withTop (readoutRect.getBottom() - 7.0f).withHeight (2.5f);
-        g.setColour (orange.withAlpha (0.25f));
-        g.fillRect (bar);
-        g.setColour (orange);
-        g.fillRect (bar.withWidth (bar.getWidth() * pr));
-    }
-}
-
-void NgateAudioProcessorEditor::drawToggle (Graphics& g)
-{
-    // L'ecrou et la bague du mini-inverseur sont dans le fond (photo) ; le levier vient de la meme photo
-    // (lever.png). Il bascule de +/-30 deg : vu de dessus, sa projection raccourcit puis repart de l'autre cote.
-    if (! leverImg.isValid())
-        return;
-
-    const float t = leverPos * 2.0f - 1.0f;
-    const float f = std::sin (std::abs (t) * MathConstants<float>::pi / 6.0f) / 0.5f;   // 0..1
-    const float side = t >= 0.0f ? 1.0f : -1.0f;
-    const int iw = leverImg.getWidth(), ih = leverImg.getHeight();
-    const int shaftW = (int) leverBallL + 3;
-    const auto shaft = leverImg.getClippedImage ({ 0, 0, shaftW, ih });
-    const auto ball  = leverImg.getClippedImage ({ (int) leverBallL - 2, 0, iw - (int) leverBallL + 2, ih });
-    const float ballCx = 67.9f;                                      // centre de la bille dans le sprite
-    const float tipX = toggleC.x + side * f * (ballCx - leverPivotX) * 0.5f;
-
-    auto shaftT = [&] (Point<float> o)
-    {
-        return AffineTransform::translation (-leverPivotX, -leverPivotY)
-                 .scaled (0.5f * f * side, 0.5f).translated (toggleC + o);
-    };
-    auto ballT = [&] (Point<float> o)
-    {
-        return AffineTransform::translation (-(ballCx - (leverBallL - 2.0f)), -leverPivotY)
-                 .scaled (0.5f).translated (tipX + o.x, toggleC.y + o.y);
-    };
-
-    g.setImageResamplingQuality (Graphics::highResamplingQuality);
-    // ombre portee (lumiere en haut a gauche) : plus marquee au bout, qui est plus haut
-    g.setColour (Colours::black.withAlpha (0.30f));
-    if (f > 0.02f) g.drawImageTransformed (shaft, shaftT ({ 1.5f, 2.5f }), true);
-    g.drawImageTransformed (ball, ballT ({ 2.0f + 1.5f * f, 3.0f + 1.5f * f }), true);
-    g.setColour (Colours::black.withAlpha (0.18f));
-    g.drawImageTransformed (ball, ballT ({ 3.5f + 2.0f * f, 5.0f + 2.0f * f }), true);
-
-    g.setOpacity (1.0f);
-    if (f > 0.02f) g.drawImageTransformed (shaft, shaftT ({}), false);
-    g.drawImageTransformed (ball, ballT ({}), false);
 }
 
 void NgateAudioProcessorEditor::drawLeds (Graphics& g)
 {
-    auto lens = [&g] (Point<float> c, float r, float level, Colour core, Colour mid, Colour deep)
+    auto one = [&] (Point<float> c, float level, const Image& glowImg, Rectangle<float> glowRect, const Image& lens)
     {
-        if (level <= 0.003f)
-            return;
-        const float bloomR = 26.0f;
-        ColourGradient bloom (mid.withAlpha (jmin (1.0f, 0.6f * level)), c.x, c.y, mid.withAlpha (0.0f), c.x + bloomR, c.y, true);
-        bloom.addColour (0.35, mid.withAlpha (0.16f * level));
-        g.setGradientFill (bloom);
-        g.fillEllipse (c.x - bloomR, c.y - bloomR, bloomR * 2.0f, bloomR * 2.0f);
-
-        ColourGradient body (core.withAlpha (level), c.x - r * 0.10f, c.y - r * 0.12f,
-                             deep.withAlpha (level), c.x + r * 1.05f, c.y + r * 0.2f, true);
-        body.addColour (0.30, core.interpolatedWith (mid, 0.55f).withAlpha (level));
-        body.addColour (0.62, mid.withAlpha (level));
-        g.setGradientFill (body);
-        g.fillEllipse (c.x - r, c.y - r, r * 2.0f, r * 2.0f);
-
-        g.setColour (Colours::white.withAlpha (0.75f * level));
-        g.fillEllipse (c.x - r * 0.55f, c.y - r * 0.62f, r * 0.6f, r * 0.45f);
+        if (level <= 0.003f) return;
+        g.setOpacity (level);
+        if (glowImg.isValid()) g.drawImage (glowImg, glowRect);
+        const float hs = layout::ledS * 0.5f;
+        if (lens.isValid()) g.drawImage (lens, { c.x - hs, c.y - hs, hs * 2.0f, hs * 2.0f });
+        g.setOpacity (1.0f);
     };
-
-    lens (openC, ledR, openLevel, grnCore, grnMid, grnDeep);
-    lens (gateC, ledR, gateLevel, orgCore, orgMid, orgDeep);
-
+    one (layout::openLedPos, openLevel, glowG, layout::glowGreenRect, ledG);
+    one (layout::gateLedPos, gateLevel, glowO, layout::glowOrangeRect, ledO);
 }
 
-// Les boutons LEARN et BASS sont dans l'image de fond (photo) : on ne dessine que l'appui,
-// le survol et l'eclairage (couronne orange), plus l'anneau de progression du LEARN.
-static void paintButtonOverlay (Graphics& g, float scale, bool pressed, bool over, float glow, float progress)
+void NgateAudioProcessorEditor::drawReadout (Graphics& g)
 {
-    g.addTransform (AffineTransform::scale (scale));
-    const float bb = btnR + 10.0f;
-    const Point<float> c { bb, bb };
-
-    if (glow > 0.003f)
-    {
-        ColourGradient gl (orange.withAlpha (0.0f), c.x, c.y, orange.withAlpha (0.0f), c.x + bb, c.y, true);
-        gl.addColour (btnR / bb - 0.06, orange.withAlpha (0.0f));
-        gl.addColour (btnR / bb + 0.03, orange.withAlpha (0.55f * glow));
-        g.setGradientFill (gl);
-        g.fillEllipse (c.x - bb, c.y - bb, bb * 2.0f, bb * 2.0f);
-        g.setColour (orange.withAlpha (0.85f * glow));
-        g.drawEllipse (c.x - btnR, c.y - btnR, btnR * 2.0f, btnR * 2.0f, 1.3f);
-    }
-
-    if (progress >= 0.0f)
-    {
-        Path arc;
-        arc.addCentredArc (c.x, c.y, btnR + 4.5f, btnR + 4.5f, 0.0f, 0.0f, MathConstants<float>::twoPi * progress, true);
-        g.setColour (orange);
-        g.strokePath (arc, PathStrokeType (2.2f, PathStrokeType::curved, PathStrokeType::rounded));
-    }
-
-    if (pressed)   // poussoir enfonce : plus sombre, ombre interne en haut
-    {
-        g.setColour (Colours::black.withAlpha (0.38f));
-        g.fillEllipse (c.x - btnCapR, c.y - btnCapR, btnCapR * 2.0f, btnCapR * 2.0f);
-        ColourGradient in (Colours::black.withAlpha (0.55f), c.x, c.y - btnCapR, Colours::black.withAlpha (0.0f), c.x, c.y - btnCapR * 0.2f, false);
-        g.setGradientFill (in);
-        g.fillEllipse (c.x - btnCapR, c.y - btnCapR, btnCapR * 2.0f, btnCapR * 2.0f);
-    }
-    else if (over)
-    {
-        g.setColour (Colours::white.withAlpha (0.06f));
-        g.fillEllipse (c.x - btnCapR, c.y - btnCapR, btnCapR * 2.0f, btnCapR * 2.0f);
-    }
-}
-
-void NgateAudioProcessorEditor::paintLearn (Graphics& g, bool pressed, bool over)
-{
+    const auto r = layout::readoutRect;
+    Graphics::ScopedSaveState ss (g);
+    g.reduceClipRegion (r.toNearestInt());
     const bool learning = proc.learning.load();
-    paintButtonOverlay (g, (float) getHeight() / (float) baseH, pressed, over,
-                        jmax (learnGlow, learnDone * 0.8f), learning ? proc.learnProgress.load() : -1.0f);
+    const float dim = 0.28f + 0.72f * powerLevel;
+    Colour c = learning ? accent : cream;
+    if (learnDone > 0.0f && ! learning)
+        c = cream.interpolatedWith (accent, learnDone * (0.5f + 0.5f * (float) std::sin (phase * 14.0)));
+    g.setFont (Font (FontOptions (medFace).withHeight (34.0f)));
+    const auto tr = r.reduced (10.0f, 2.0f);
+    g.setColour (c.withAlpha (0.16f * dim));
+    g.drawText (readoutText(), tr.translated (0.0f, 1.5f), Justification::centredRight);
+    g.setColour (c.withAlpha (dim));
+    g.drawText (readoutText(), tr, Justification::centredRight);
+    if (learning)
+    {
+        const auto bar = r.reduced (10.0f, 0.0f).withTop (r.getBottom() - 7.0f).withHeight (2.5f);
+        g.setColour (accent.withAlpha (0.25f)); g.fillRect (bar);
+        g.setColour (accent); g.fillRect (bar.withWidth (bar.getWidth() * proc.learnProgress.load()));
+    }
 }
 
-void NgateAudioProcessorEditor::paintBass (Graphics& g, bool pressed, bool over)
+void NgateAudioProcessorEditor::drawBar (Graphics& g)
 {
-    paintButtonOverlay (g, (float) getHeight() / (float) baseH, pressed, over, bassLevel, -1.0f);
-}
+    // pastille unique (400 x 38) : la ligne d'etat remplace la barre de presets pendant les reglages
+    const auto r = barRect;
+    const float rad = r.getHeight() * 0.5f;
+    g.setColour (Colour (0xff0a0a0b));
+    g.fillRoundedRectangle (r.expanded (1.5f), rad + 1.5f);
+    g.setColour (Colour (0xff060708));
+    g.fillRoundedRectangle (r, rad);
+    g.setColour (Colour (0xff4e5054).withAlpha (hoverZone != 0 && statusAlpha <= 0.0f ? 1.0f : 0.8f));
+    g.drawRoundedRectangle (r.reduced (0.4f), rad, 0.9f);
 
-void NgateAudioProcessorEditor::drawStatus (Graphics& g)
-{
-    const float a = statusAlpha;
-    if (a <= 0.0f)
-        return;
-
-    const Colour accent = proc.learning.load() || learnDone > 0.0f ? orange : Colour (0xffd8dde2);
-
-    g.setColour (Colours::black.withAlpha (0.82f * a));
-    g.fillRoundedRectangle (statusRect, 8.0f);
-    g.setColour (accent.withAlpha (0.45f * a));
-    g.drawRoundedRectangle (statusRect.reduced (0.75f), 8.0f, 1.5f);
-
-    g.setColour (Colours::white.withAlpha (a));
-    g.setFont (font (17.0f, true));
-    g.drawFittedText (lastStatus, statusRect.withHeight (28.0f).translated (0.0f, 3.0f).reduced (8.0f, 0.0f).toNearestInt(),
-                      Justification::centred, 1, 0.8f);
-
-    g.setColour ((midiFlash > 0 ? Colour (0xffff6a50) : accent).withMultipliedAlpha (a));
-    g.setFont (font (14.0f, true));
-    g.drawFittedText (lastPreset, statusRect.withTrimmedTop (28.0f).withTrimmedBottom (4.0f).reduced (8.0f, 0.0f).toNearestInt(),
-                      Justification::centred, 1, 0.8f);
+    g.setFont (Font (FontOptions (medFace).withHeight (barFont)));
+    if (statusAlpha > 0.0f)
+    {
+        g.setColour (barInk.withAlpha (statusAlpha));
+        g.drawFittedText (statusLine, r.reduced (rad, 0.0f).toNearestInt(), Justification::centred, 1, 0.6f);
+    }
+    const float a = 1.0f - statusAlpha;
+    if (a <= 0.0f) return;
+    auto arrow = [&] (Rectangle<float> ar, bool left, bool hot)
+    {
+        Path p; const auto c = ar.getCentre(); const float sz = 5.5f;
+        if (left) p.addTriangle (c.x + sz * 0.6f, c.y - sz, c.x + sz * 0.6f, c.y + sz, c.x - sz * 0.8f, c.y);
+        else      p.addTriangle (c.x - sz * 0.6f, c.y - sz, c.x - sz * 0.6f, c.y + sz, c.x + sz * 0.8f, c.y);
+        g.setColour (barInk.withAlpha ((hot ? 1.0f : 0.6f) * a));
+        g.fillPath (p);
+    };
+    arrow (r.withWidth (arrowW), true, hoverZone == 1);
+    arrow (r.withTrimmedLeft (r.getWidth() - arrowW), false, hoverZone == 3);
+    g.setColour ((midiFlash > 0 ? accent.brighter (0.4f) : barInk).withAlpha ((hoverZone == 2 ? 1.0f : 0.92f) * a));
+    g.drawFittedText (presetLine, r.reduced (arrowW, 0.0f).toNearestInt(), Justification::centred, 1, 0.7f);
 }
 
 void NgateAudioProcessorEditor::paint (Graphics& g)
 {
     lastPaintMs = Time::getMillisecondCounterHiRes();
     repaintAskedMs = 0.0;
-    g.fillAll (Colours::black);
-    // anti-gel : aucun rescale ici, on dessine le cache existant (ou l'original en attendant le timer)
+    g.fillAll (Colour (0xff111112));          // autour des jacks : le fond de l'image est transparent
     const Image& bg = bgScaled.isValid() ? bgScaled : background;
-    g.setImageResamplingQuality (bg.getWidth() == background.getWidth() ? Graphics::highResamplingQuality
-                                                                         : Graphics::lowResamplingQuality);
-    if (bg.isValid())
-        g.drawImage (bg, getLocalBounds().toFloat());
-
-    const float s = (float) getHeight() / (float) baseH;
+    g.setImageResamplingQuality (&bg == &background ? Graphics::highResamplingQuality : Graphics::lowResamplingQuality);
+    if (bg.isValid()) g.drawImage (bg, getLocalBounds().toFloat());
+    if (printLayer.isValid())
+    {
+        g.setImageResamplingQuality (Graphics::mediumResamplingQuality);
+        g.drawImage (printLayer, getLocalBounds().toFloat());
+    }
+    const float s = (float) getHeight() / baseH;
     g.addTransform (AffineTransform::scale (s));
-
+    g.setImageResamplingQuality (Graphics::mediumResamplingQuality);
+    drawLeds (g);
     drawMeter (g);
     drawReadout (g);
-    drawToggle (g);
-    drawLeds (g);
-}
-
-void NgateAudioProcessorEditor::paintOverChildren (Graphics& g)
-{
-    // la ligne d'etat passe au-dessus du footswitch
-    const float s = (float) getHeight() / (float) baseH;
-    g.addTransform (AffineTransform::scale (s));
-    drawStatus (g);
+    drawBar (g);
 }
 
 //==============================================================================
-void NgateAudioProcessorEditor::mouseDown (const MouseEvent& e)
+// Souris : barre de presets (fleches = precedent / suivant, nom = menu), clic droit = menu (la ou l'on clique)
+//==============================================================================
+static int presetZoneAt (Point<float> p)
 {
-    if (e.mods.isPopupMenu())
-        showContextMenu();
+    if (! barRect.contains (p)) return 0;
+    if (p.x < barRect.getX() + arrowW) return 1;
+    if (p.x > barRect.getRight() - arrowW) return 3;
+    return 2;
 }
 
-void NgateAudioProcessorEditor::addMidiMenu (PopupMenu& menu, int learnIdx)
+void NgateAudioProcessorEditor::mouseMove (const MouseEvent& e)
 {
-    const int lt = proc.learnTarget.load();
-    auto ccText = [this] (int i)
+    const float s = (float) getHeight() / baseH;
+    hoverZone = presetZoneAt (e.position / s);
+    setMouseCursor (hoverZone != 0 ? MouseCursor::PointingHandCursor : MouseCursor::NormalCursor);
+}
+
+void NgateAudioProcessorEditor::mouseExit (const MouseEvent&) { hoverZone = 0; }
+
+void NgateAudioProcessorEditor::mouseDown (const MouseEvent& e)
+{
+    if (e.mods.isPopupMenu()) { showContextMenu (-1); return; }
+    const float s = (float) getHeight() / baseH;
+    const auto p = e.position / s;
+    if (statusAlpha > 0.0f && barRect.contains (p)) { statusUntil = 0.0; learnLineUntil = 0.0; learnDone = 0.0f; return; }
+    // clic sur SOFT / HARD (inscriptions) = choix direct
+    for (const auto& t : layout::texts)
     {
-        const int cc = proc.ccMap[i].load();
-        return cc >= 0 ? "CC " + String (cc) : String ("none");
-    };
-    // clic droit sur une commande : MIDI Learn de cette commande en tete du menu
-    // (footswitch : ses deux CC, a accrochage et bascule a chaque appui)
-    if (learnIdx >= 0)
-    {
-        const int last = learnIdx == 4 ? 5 : learnIdx;
-        for (int i = learnIdx; i <= last; ++i)
+        const String txt (t.s);
+        if ((txt == "SOFT" || txt == "HARD") && std::abs (p.x - t.x) < 34.0f && std::abs (p.y - t.y) < 14.0f)
         {
-            const String name = NgateAudioProcessor::learnDef (i).name;
-            menu.addItem (1000 + i, "MIDI Learn: " + name + " (" + ccText (i) + ")", true, lt == i);
-            menu.addItem (1100 + i, "Clear MIDI: " + name, proc.ccMap[i].load() >= 0);
+            lever.set (txt == "HARD");
+            return;
         }
-        if (lt >= 0) menu.addItem (1200, "Cancel MIDI learn");
-        menu.addSeparator();
+    }
+    switch (presetZoneAt (p))
+    {
+        case 1: stepPreset (-1); break;
+        case 2: showPresetMenu(); break;
+        case 3: stepPreset (1); break;
+        default: break;
     }
 }
 
-void NgateAudioProcessorEditor::handleMidiMenu (int r)
+void NgateAudioProcessorEditor::stepPreset (int delta)
 {
-    if (r >= 1000 && r < 1000 + NgateAudioProcessor::numLearn)
-        proc.learnTarget.store (proc.learnTarget.load() == r - 1000 ? -1 : r - 1000);   // re-cliquer annule
-    else if (r >= 1100 && r < 1100 + NgateAudioProcessor::numLearn) proc.ccMap[r - 1100].store (-1);
-    else if (r == 1200) proc.learnTarget.store (-1);
-    else if (r == 1201) { proc.learnTarget.store (-1); proc.resetMidiMap(); }
-    showStatus();
+    const int n = NgateAudioProcessor::getNumFactoryPresets();
+    int cp = proc.currentPreset.load();
+    if (cp < 0 || cp >= n) cp = delta > 0 ? -1 : 0;
+    proc.applyFactoryPreset ((cp + delta + n) % n);
+}
+
+void NgateAudioProcessorEditor::showPresetMenu()
+{
+    PopupMenu m;
+    m.setLookAndFeel (&menuLnf);
+    NineHandsMenu::addHeader (m, menuLnf.f, NineHandsMenu::icoPreset, accent, "Presets", buildPresetLine());
+    m.addSectionHeader ("Factory presets");
+    for (int i = 0; i < NgateAudioProcessor::getNumFactoryPresets(); ++i)
+        m.addItem (100 + i, String (i + 1) + ". " + NgateAudioProcessor::getFactoryPreset (i).name, true, proc.currentPreset.load() == i);
+    m.addSeparator();
+    PopupMenu load, save;
+    for (int slot = 1; slot <= 9; ++slot)
+    {
+        const bool exists = proc.hasUserPreset (slot);
+        load.addItem (200 + slot, "User " + String (slot) + (exists ? "" : "  (empty)"), exists, proc.currentPreset.load() == 100 + slot);
+        save.addItem (300 + slot, "User " + String (slot) + (exists ? "  (overwrite)" : ""));
+    }
+    m.addSubMenu ("Load user preset", load);
+    m.addSubMenu ("Save user preset", save);
+    m.showMenuAsync (PopupMenu::Options().withTargetScreenArea (localAreaToGlobal (scaled (barRect))),
+        [safe = Component::SafePointer<NgateAudioProcessorEditor> (this)] (int r)
+        {
+            if (safe == nullptr || r == 0) return;
+            auto& pr = safe->proc;
+            if      (r >= 100 && r < 200) pr.applyFactoryPreset (r - 100);
+            else if (r > 200 && r < 300)  pr.loadUserPreset (r - 200);
+            else if (r > 300 && r < 400)  pr.saveUserPreset (r - 300);
+        });
 }
 
 void NgateAudioProcessorEditor::showContextMenu (int learnIdx)
 {
+    using namespace NineHandsMenu;
     auto raw = [this] (const char* id) { return proc.apvts.getRawParameterValue (id)->load(); };
     PopupMenu menu;
-    addMidiMenu (menu, learnIdx);
-
+    menu.setLookAndFeel (&menuLnf);
+    auto ccText = [this] (int i)
     {
-        // Plugin size : taille de cette fenetre + taille par defaut des nouvelles fenetres (comme Octopus)
+        const int cc = proc.ccMap[i].load();
+        return cc >= 0 ? "CC " + String (cc) : String ("not assigned");
+    };
+    const int lt = proc.learnTarget.load();
+    if (learnIdx >= 0)
+    {
+        const String name = NgateAudioProcessor::learnDef (learnIdx).name;
+        const int ico = learnIdx == 0 ? icoKnob : (learnIdx >= 4 ? icoPedal : icoSwitch);
+        addHeader (menu, menuLnf.f, ico, accent, name, "MIDI: " + ccText (learnIdx));
+        menu.addItem (1000 + learnIdx, "MIDI Learn: " + name, true, lt == learnIdx);
+        menu.addItem (1100 + learnIdx, "Clear MIDI: " + name, proc.ccMap[learnIdx].load() >= 0);
+        if (learnIdx == 4)
+        {
+            menu.addItem (1000 + 5, "MIDI Learn: Footswitch toggle (each press)", true, lt == 5);
+            menu.addItem (1100 + 5, "Clear MIDI: Footswitch toggle", proc.ccMap[5].load() >= 0);
+        }
+        if (lt >= 0) menu.addItem (1200, "Cancel MIDI learn");
+        menu.addSeparator();
+    }
+    else
+        addHeader (menu, menuLnf.f, icoPedal, accent, "Ngate", "Noise gate  v" + String (JucePlugin_VersionString));
+
+    PopupMenu sizes;
+    {
         const char* names[numSizes] = { "60 %", "75 %", "100 %" };
         const int def = WigaWindowSize::defaultIndex (JucePlugin_Name, numSizes);
-        PopupMenu sizes, defSizes;
+        PopupMenu defSizes;
         for (int i = 0; i < numSizes; ++i)
         {
             sizes.addItem (1 + i, String (names[i]) + (i == def ? "  (default)" : ""), true, std::abs (getHeight() - sizeHeight (i)) <= 2);
@@ -915,22 +878,19 @@ void NgateAudioProcessorEditor::showContextMenu (int learnIdx)
         }
         sizes.addSeparator();
         sizes.addSubMenu ("Default size (new windows)", defSizes);
-        menu.addSubMenu ("Plugin size", sizes);
     }
+    menu.addSubMenu ("Plugin size", sizes);
     menu.addSeparator();
 
     PopupMenu factory;
     for (int i = 0; i < NgateAudioProcessor::getNumFactoryPresets(); ++i)
-        factory.addItem (100 + i, String (i + 1) + ". " + NgateAudioProcessor::getFactoryPreset (i).name,
-                         true, proc.currentPreset.load() == i);
+        factory.addItem (100 + i, String (i + 1) + ". " + NgateAudioProcessor::getFactoryPreset (i).name, true, proc.currentPreset.load() == i);
     menu.addSubMenu ("Factory presets", factory);
-
     PopupMenu load, save;
     for (int slot = 1; slot <= 9; ++slot)
     {
         const bool exists = proc.hasUserPreset (slot);
-        load.addItem (200 + slot, "User " + String (slot) + (exists ? "" : "  (empty)"), exists,
-                      proc.currentPreset.load() == 100 + slot);
+        load.addItem (200 + slot, "User " + String (slot) + (exists ? "" : "  (empty)"), exists, proc.currentPreset.load() == 100 + slot);
         save.addItem (300 + slot, "User " + String (slot) + (exists ? "  (overwrite)" : ""));
     }
     menu.addSubMenu ("Load user preset", load);
@@ -938,61 +898,51 @@ void NgateAudioProcessorEditor::showContextMenu (int learnIdx)
     menu.addSeparator();
 
     menu.addItem (40, proc.learning.load() ? "Cancel LEARN" : "LEARN noise floor (1.5 s)");
-    PopupMenu mode;
-    mode.addItem (41, "Soft (natural decay)", true, raw ("hard") < 0.5f);
-    mode.addItem (42, "Hard (tight, fast)",   true, raw ("hard") > 0.5f);
-    menu.addSubMenu ("Gate mode", mode);
-    PopupMenu inst;
-    inst.addItem (43, "Guitar", true, raw ("bass") < 0.5f);
-    inst.addItem (44, "Bass",   true, raw ("bass") > 0.5f);
-    menu.addSubMenu ("Instrument", inst);
-    PopupMenu range;
-    range.addItem (45, "Full mute",               true, roundToInt (raw ("range")) == 0);
-    range.addItem (46, "-40 dB (keeps a breath)", true, roundToInt (raw ("range")) == 1);
-    range.addItem (47, "-20 dB (gentle)",         true, roundToInt (raw ("range")) == 2);
-    menu.addSubMenu ("Range (closed gate)", range);
-    menu.addSeparator();
+    PopupMenu gate;
+    gate.addItem (41, "Soft (natural decay)", true, raw ("hard") < 0.5f);
+    gate.addItem (42, "Hard (tight, fast)",   true, raw ("hard") > 0.5f);
+    gate.addSeparator();
+    gate.addItem (43, "Guitar", true, raw ("bass") < 0.5f);
+    gate.addItem (44, "Bass",   true, raw ("bass") > 0.5f);
+    gate.addSeparator();
+    gate.addSectionHeader ("Range (closed gate)");
+    gate.addItem (45, "Full mute",               true, roundToInt (raw ("range")) == 0);
+    gate.addItem (46, "-40 dB (keeps a breath)", true, roundToInt (raw ("range")) == 1);
+    gate.addItem (47, "-20 dB (gentle)",         true, roundToInt (raw ("range")) == 2);
+    menu.addSubMenu ("Gate settings", gate);
 
     PopupMenu midi;
+    midi.addSectionHeader ("MIDI Learn");
     for (int i = 0; i < NgateAudioProcessor::numLearn; ++i)
-    {
-        const int cc = proc.ccMap[i].load();
-        midi.addItem (1000 + i, "Learn: " + String (NgateAudioProcessor::learnDef (i).name)
-                                 + " (" + (cc >= 0 ? "CC " + String (cc) : String ("none")) + ")",
-                      true, proc.learnTarget.load() == i);
-    }
+        midi.addItem (1000 + i, "Learn: " + String (NgateAudioProcessor::learnDef (i).name) + "  (" + ccText (i) + ")", true, lt == i);
     midi.addSeparator();
-    if (proc.learnTarget.load() >= 0) midi.addItem (1200, "Cancel MIDI learn");
+    if (lt >= 0) midi.addItem (1200, "Cancel MIDI learn");
     midi.addItem (1201, "Clear all MIDI assignments");
     midi.addSeparator();
-    midi.addItem (906, "Program Change 1-10  Factory presets", false);
+    midi.addItem (911, "Program Change 1-" + String (NgateAudioProcessor::getNumFactoryPresets()) + "  Factory presets", false);
     menu.addSubMenu ("MIDI", midi);
-
     menu.addSeparator();
-    menu.addItem (999, "Ngate noise gate v" + String (JucePlugin_VersionString) + " - NINE HANDS | DSP", false);
+    menu.addItem (999, "Ngate v" + String (JucePlugin_VersionString) + "  NINE HANDS | DSP", false);
 
-    menu.showMenuAsync (PopupMenu::Options().withTargetComponent (this),
+    menu.showMenuAsync (PopupMenu::Options().withMousePosition(),       // toujours la ou l'on clique
         [safe = Component::SafePointer<NgateAudioProcessorEditor> (this)] (int r)
         {
-            if (safe == nullptr || r == 0)
-                return;
-
+            if (safe == nullptr || r == 0) return;
             auto& ed = *safe;
-            if      (r >= 1 && r < 1 + numSizes) ed.setScaledHeight (ed.sizeHeight (r - 1));
-            else if (r >= 20 && r < 20 + numSizes)
-            {
-                WigaWindowSize::setDefaultIndex (JucePlugin_Name, r - 20);   // toutes les nouvelles fenetres de ce plugin
-                ed.setScaledHeight (ed.sizeHeight (r - 20));                // et cette fenetre tout de suite
-            }
-            else if (r == 40) { if (ed.proc.learning.load()) ed.proc.cancelLearn(); else ed.proc.startLearn(); }
-            else if (r == 41 || r == 42) { ed.setParamValue ("hard",  r == 42 ? 1.0f : 0.0f); ed.proc.currentPreset = -1; }
-            else if (r == 43 || r == 44) { ed.setParamValue ("bass",  r == 44 ? 1.0f : 0.0f); ed.proc.currentPreset = -1; }
-            else if (r >= 45 && r <= 47) { ed.setParamValue ("range", (float) (r - 45));       ed.proc.currentPreset = -1; }
-            else if (r >= 100 && r < 200) ed.proc.applyFactoryPreset (r - 100);
-            else if (r > 200 && r < 300)  ed.proc.loadUserPreset (r - 200);
-            else if (r > 300 && r < 400)  ed.proc.saveUserPreset (r - 300);
-            else if (r >= 1000) { ed.handleMidiMenu (r); return; }
-
+            auto& pr = ed.proc;
+            if      (r >= 1 && r < 1 + numSizes) ed.setScaledHeight (sizeHeight (r - 1));
+            else if (r >= 20 && r < 20 + numSizes) { WigaWindowSize::setDefaultIndex (JucePlugin_Name, r - 20); ed.setScaledHeight (sizeHeight (r - 20)); }
+            else if (r == 40) { if (pr.learning.load()) pr.cancelLearn(); else pr.startLearn(); }
+            else if (r == 41 || r == 42) { ed.setParamValue ("hard", r == 42 ? 1.0f : 0.0f); pr.currentPreset = -1; }
+            else if (r == 43 || r == 44) { ed.setParamValue ("bass", r == 44 ? 1.0f : 0.0f); pr.currentPreset = -1; }
+            else if (r >= 45 && r <= 47) { ed.setParamValue ("range", (float) (r - 45)); pr.currentPreset = -1; }
+            else if (r >= 100 && r < 200) pr.applyFactoryPreset (r - 100);
+            else if (r > 200 && r < 300)  pr.loadUserPreset (r - 200);
+            else if (r > 300 && r < 400)  pr.saveUserPreset (r - 300);
+            else if (r >= 1000 && r < 1000 + NgateAudioProcessor::numLearn) pr.learnTarget.store (r - 1000);
+            else if (r >= 1100 && r < 1100 + NgateAudioProcessor::numLearn) pr.ccMap[r - 1100].store (-1);
+            else if (r == 1200) pr.learnTarget.store (-1);
+            else if (r == 1201) { pr.learnTarget.store (-1); pr.resetMidiMap(); }
             ed.showStatus();
         });
 }

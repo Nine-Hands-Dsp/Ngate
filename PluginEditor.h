@@ -2,78 +2,63 @@
 
 #include "PluginProcessor.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include "Layout.h"
+#include "NineHandsMenu.h"
 
 //==============================================================================
-// Potard THRESHOLD vectoriel : jupe molettee sombre + chapeau creme.
-// Lumiere fixe en haut a gauche ; seuls les crans et le repere tournent.
-// Une image du potard a la taille d'affichage est gardee en cache par position.
+// NGATE v2 (NINE HANDS | DSP) : visuel photo plein cadre (1206 x 1800 px), repere du plugin = image / 2.
+// Fond : facade, vis, plaque, fenetre, potard (ombre, jupe, chapeau et ses reflets FIXES), boutons, LED eteintes,
+// footswitch, jacks. Par-dessus : usure + index du potard (knob_top.png, tourne), couronne de points (vumetre),
+// LED allumees + lumiere sur la facade, inverseur (3 images), textes / NGATE / logo en vectoriel, pastille presets.
 //==============================================================================
-class ThresholdKnobLookAndFeel : public juce::LookAndFeel_V4
+
+// Potard THRESHOLD : seul le calque usure + index tourne ; chapeau et reflets restent dans le fond.
+class ThresholdKnob : public juce::Slider
 {
 public:
-    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h,
-                           float pos, float startAngle, float endAngle, juce::Slider&) override;
-    float physScale = 1.0f;
-    void prepare (int pixelSize);          // anti-gel v2 : appele par le timer de l'editeur seulement
-
-private:
-    juce::Image lightSrc, darkSrc, lightScaled, darkScaled;
-    int scaledSize = 0;
+    void paint (juce::Graphics&) override;
+    bool hitTest (int x, int y) override;
+    juce::Image top, topScaled;          // knob_top.png et sa copie a la taille d'affichage (preparee par le timer)
+    void prepare (float physScale);
 };
 
-//==============================================================================
-// Bouton rond dessine (LEARN, BASS) : etat enfonce + clic droit transmis
-//==============================================================================
-class RoundButton : public juce::Component
+// Bouton poussoir (LEARN, BASS) : photo dans le fond ; on dessine l'appui, le survol et la couronne orange.
+class PushButton : public juce::Component
 {
 public:
     std::function<void()> onClick, onRightClick;
-    std::function<void (juce::Graphics&, bool pressed, bool over)> painter;
-
-    RoundButton() { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
-    void paint (juce::Graphics& g) override { if (painter) painter (g, pressed, isMouseOver()); }
-    bool hitTest (int x, int y) override
-    {
-        return getLocalBounds().toFloat().getCentre().getDistanceFrom ({ (float) x, (float) y }) <= (float) getWidth() * 0.5f;
-    }
-    void mouseDown (const juce::MouseEvent& e) override
-    {
-        if (e.mods.isPopupMenu()) { if (onRightClick) onRightClick(); return; }
-        pressed = true; repaint();
-    }
-    void mouseUp (const juce::MouseEvent& e) override
-    {
-        if (! pressed) return;
-        pressed = false; repaint();
-        if (contains (e.getPosition()) && onClick) onClick();
-    }
+    float glow = 0.0f, progress = -1.0f;
+    PushButton() { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
+    void paint (juce::Graphics&) override;
+    bool hitTest (int x, int y) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
     void mouseEnter (const juce::MouseEvent&) override { repaint(); }
-    void mouseExit  (const juce::MouseEvent&) override { repaint(); }
-
+    void mouseExit (const juce::MouseEvent&) override  { repaint(); }
 private:
     bool pressed = false;
 };
 
-//==============================================================================
-// Zone cliquable (switch SOFT / HARD et ses inscriptions)
-//==============================================================================
-class ClickArea : public juce::Component
+// Inverseur horizontal SOFT / HARD (photos : levier a droite = HARD, a gauche = SOFT, milieu ~55 ms pendant la bascule)
+class LeverSwitch : public juce::Component
 {
 public:
-    std::function<void (const juce::MouseEvent&)> onClick;
-    std::function<void()> onRightClick;
-    ClickArea() { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
-    void paint (juce::Graphics&) override {}
-    void mouseDown (const juce::MouseEvent& e) override
-    {
-        if (e.mods.isPopupMenu()) { if (onRightClick) onRightClick(); }
-        else if (onClick) onClick (e);
-    }
+    explicit LeverSwitch (juce::RangedAudioParameter& p);
+    void paint (juce::Graphics&) override;
+    bool hitTest (int x, int y) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    void tick (double nowMs);
+    void set (bool hard);
+    juce::Image strip;                        // HARD / milieu / SOFT empiles (carres)
+    std::function<void()> onRightClick, onUserChange;
+private:
+    juce::ParameterAttachment attachment;
+    int frame = 0, shown = 0;                 // 0 = HARD, 1 = milieu, 2 = SOFT
+    double transitionUntil = 0.0;
 };
 
-//==============================================================================
-// Zone cliquable du footswitch (dessine sur l'image de fond)
-//==============================================================================
+// Footswitch (photo d'Echoflex, dans le fond) : fonctionnement d'Echoflex
 class FootSwitchArea : public juce::Component
 {
 public:
@@ -82,119 +67,110 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
     bool hitTest (int x, int y) override;
-    bool isOn() const { return value; }
-
+    std::function<void()> onRightClick, onUserChange;
 private:
-    bool value = true;
-    bool pressed = false;
+    bool value = true, pressed = false;
     juce::ParameterAttachment attachment;
 };
 
-//==============================================================================
-// Transmet le clic droit des commandes vers le menu de l'editeur
-//==============================================================================
 struct RightClickForwarder : public juce::MouseListener
 {
-    std::function<void (juce::Component*)> callback;    // composant clique : menu MIDI Learn de cette commande
-    void mouseDown (const juce::MouseEvent& e) override
-    {
-        if (e.mods.isPopupMenu() && callback)
-            callback (e.eventComponent);
-    }
+    std::function<void()> callback;
+    void mouseDown (const juce::MouseEvent& e) override { if (e.mods.isPopupMenu() && callback) callback(); }
 };
 
 //==============================================================================
 class NgateAudioProcessorEditor : public juce::AudioProcessorEditor,
-                                   private juce::Timer
+                                  private juce::Timer
 {
 public:
     explicit NgateAudioProcessorEditor (NgateAudioProcessor&);
     ~NgateAudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
-    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void parentHierarchyChanged() override;
     void mouseDown (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
 
-    // Repere de reference (100 %) ; taille par defaut = taille minimale (identique a Echoflex)
-    static constexpr int baseW = 760;
-    static constexpr int baseH = 958;
-    static constexpr int defaultH = 493;
+    static constexpr float baseW = layout::frameW;
+    static constexpr float baseH = layout::frameH;
+    static constexpr int defaultH = 493;     // « 60 % » = taille minimale
+    static constexpr int refH = 958;         // 100 %
+    static constexpr int maxH = refH * 3 / 2;
+    static constexpr int numSizes = 3;
+    static int sizeHeight (int idx);
+    void setScaledHeight (int h);
+
+    // outil de rendu (captures)
+    void forceRenderScale (float sc) { forcedScale = sc; rebuildCaches (sc); }
+    void openMainMenu() { showContextMenu (-1); }
+    void tickForCapture() { timerCallback(); }
+    void showStatus();
 
 private:
     void timerCallback() override;
     void useSoftwareRenderer();
-    void showContextMenu (int learnIdx = -1);     // learnIdx >= 0 : clic droit sur une commande (MIDI Learn en tete du menu)
-    void addMidiMenu (juce::PopupMenu& menu, int learnIdx);
-    void handleMidiMenu (int r);
-    void setScaledHeight (int h);
-    static constexpr int numSizes = 3;          // 60 % (defaut d'origine) / 75 % / 100 %
-    static int sizeHeight (int idx);
-    void setParamValue (const char* id, float plain);
-    void toggleParam (const char* id);
-    void showStatus();
+    void visibilityChanged() override;
+    void askRepaint (juce::Rectangle<int> r);
+    void showContextMenu (int learnIdx);
+    void showPresetMenu();
+    void stepPreset (int delta);
     void rebuildCaches (float scale = 0.0f);
     float physicalScale() const;
-
-    void drawMeter (juce::Graphics&);
-    void drawReadout (juce::Graphics&);
-    void drawToggle (juce::Graphics&);
-    void drawLeds (juce::Graphics&);
-    void drawStatus (juce::Graphics&);
-    void paintLearn (juce::Graphics&, bool pressed, bool over);
-    void paintBass (juce::Graphics&, bool pressed, bool over);
+    juce::Rectangle<int> scaled (juce::Rectangle<float> r) const;
+    void toggleParam (const char* id);
+    void setParamValue (const char* id, float plain);
 
     juce::String buildStatusLine() const;
     juce::String buildPresetLine() const;
     juce::String readoutText() const;
-    juce::Rectangle<int> scaled (juce::Rectangle<float> r) const;
+    void buildPrint();
+    void renderPrint (juce::Graphics&);
+    void drawMeter (juce::Graphics&);
+    void drawLeds (juce::Graphics&);
+    void drawReadout (juce::Graphics&);
+    void drawBar (juce::Graphics&);
     int litDots() const;
 
     NgateAudioProcessor& proc;
-    ThresholdKnobLookAndFeel lnf;
+    NineHandsMenu::MenuLnf menuLnf;
     RightClickForwarder rightClickFwd;
-    juce::Image background, bgScaled, leverImg;
+
+    juce::Image background, bgScaled, printLayer, glowG, glowO, ledG, ledO;
+    juce::Typeface::Ptr medFace, boldFace, lightFace, regFace;
+    juce::Path printPath, titlePath;
+    std::unique_ptr<juce::Drawable> logo;
     int cacheW = 0, cacheH = 0;
-    float cacheScale = 0.0f;
+    float cacheScale = 0.0f, forcedScale = 0.0f;
     int resizeSettle = 0;
-    // anti-gel v2 : suivi de la fenetre hote, de l'echelle et des redessins
     void* lastPeer = nullptr;
     double lastPaintMs = 0.0, repaintAskedMs = 0.0, lastScaleCheckMs = 0.0, lastRendererCheckMs = 0.0;
-    void askRepaint (juce::Rectangle<int> r);
-    void visibilityChanged() override;
 
-    juce::Slider threshold;
+    ThresholdKnob threshold;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> aThreshold;
-    RoundButton learnBtn, bassBtn;
-    ClickArea toggleArea;
+    PushButton learnBtn, bassBtn;
+    LeverSwitch lever;
     FootSwitchArea footswitch;
 
-    // Animation
-    juce::Random rng;
+    // animation
     double lastTime = 0.0, phase = 0.0;
-    float meterDb = -120.0f;          // niveau d'entree lisse pour la couronne de points
-    float openLevel = 0.0f, gateLevel = 0.0f;   // LED OPEN (verte) / GATE (orange)
-    float leverPos = 1.0f;            // 0 = SOFT, 1 = HARD
-    float bassLevel = 0.0f;
-    float powerLevel = 1.0f;          // tout s'eteint en bypass
+    float meterDb = -120.0f, openLevel = 0.0f, gateLevel = 0.0f, bassLevel = 0.0f, powerLevel = 1.0f;
     float learnGlow = 0.0f, learnDone = 0.0f;
-    int   lastLearnCount = 0;
-
-    int   drawnDots = -1;
-    float drawnOpen = -1.0f, drawnGate = -1.0f, drawnLever = -1.0f, drawnBass = -1.0f,
-          drawnLearn = -1.0f, drawnStatus = -1.0f, drawnPower = -1.0f;
+    int lastLearnCount = 0;
+    int drawnDots = -1;
+    float drawnOpen = -1.0f, drawnGate = -1.0f, drawnPower = -1.0f, drawnStatus = -1.0f;
     juce::String drawnReadout;
 
-    juce::String lastStatus, lastPreset;
-    float lastValues[4] { -1.0f, -1.0f, -1.0f, -1.0f };
-    double statusUntil = 0.0;
+    // ligne d'etat / barre de presets (meme pastille)
     float statusAlpha = 0.0f;
-    int lastMidiCount = 0;
-    int midiFlash = 0;
-    // MIDI Learn : message dans la ligne d'etat (attente, puis « <Commande> = CC n » 2 s)
-    juce::String learnLine;
+    double statusUntil = 0.0;
+    juce::String statusLine, presetLine, learnLine;
     double learnLineUntil = 0.0;
+    float lastValues[4] { -1.0f, -1.0f, -1.0f, -1.0f };
+    int lastPresetSeen = -999, lastMidiCount = 0, midiFlash = 0;
+    int hoverZone = 0, drawnHover = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NgateAudioProcessorEditor)
 };
