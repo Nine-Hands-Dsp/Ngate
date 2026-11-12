@@ -238,6 +238,7 @@ NgateAudioProcessorEditor::NgateAudioProcessorEditor (NgateAudioProcessor& p)
     lightFace = Typeface::createSystemTypefaceFor (BinaryData::PoppinsLight_ttf,  BinaryData::PoppinsLight_ttfSize);
     regFace  = Typeface::createSystemTypefaceFor (BinaryData::PoppinsRegular_ttf, BinaryData::PoppinsRegular_ttfSize);
     menuLnf.f = { regFace, medFace, boldFace };
+    glowPc = NineHandsGlow::percent (JucePlugin_Name);
     if (auto xml = XmlDocument::parse (String::fromUTF8 (BinaryData::NineHandsLogo_svg, BinaryData::NineHandsLogo_svgSize)))
         logo = Drawable::createFromSVG (*xml);
     buildPrint();
@@ -277,10 +278,11 @@ NgateAudioProcessorEditor::NgateAudioProcessorEditor (NgateAudioProcessor& p)
     const int defaultW = roundToInt ((float) defaultH * baseW / baseH);
     setResizable (true, true);
     setResizeLimits (defaultW, defaultH, roundToInt ((float) maxH * baseW / baseH), maxH);
+    hostLock.setLimits (defaultW, defaultH, roundToInt ((float) maxH * baseW / baseH), maxH);
     if (auto* cons = getConstrainer()) cons->setFixedAspectRatio ((double) baseW / (double) baseH);
     setOpaque (true);
     setSize (defaultW, defaultH);
-    setScaledHeight (sizeHeight (WigaWindowSize::defaultIndex (JucePlugin_Name, numSizes)));
+    setScaledHeight (sizeHeight (NineHandsWindow::openIndex (JucePlugin_Name, proc.uiSizeIdx.load(), numSizes)));   // taille du projet, sinon taille par defaut
     rebuildCaches();
     lastTime = Time::getMillisecondCounterHiRes();
     startTimerHz (30);
@@ -303,6 +305,7 @@ void NgateAudioProcessorEditor::setScaledHeight (int h)
 {
     h = jlimit ((int) defaultH, (int) maxH, h);
     setSize (roundToInt ((float) h * baseW / baseH), h);
+    hostLock.enforce();
 }
 
 Rectangle<int> NgateAudioProcessorEditor::scaled (Rectangle<float> r) const
@@ -476,7 +479,7 @@ void NgateAudioProcessorEditor::useSoftwareRenderer()
    #endif
 }
 
-void NgateAudioProcessorEditor::parentHierarchyChanged() { useSoftwareRenderer(); }
+void NgateAudioProcessorEditor::parentHierarchyChanged() { useSoftwareRenderer(); hostLock.track (*this); }
 void NgateAudioProcessorEditor::visibilityChanged()      { useSoftwareRenderer(); if (isShowing()) repaint(); }
 
 void NgateAudioProcessorEditor::askRepaint (Rectangle<int> r)
@@ -534,6 +537,13 @@ void NgateAudioProcessorEditor::timerCallback()
     const double dt = jlimit (0.0, 0.1, (now - lastTime) * 0.001);
     lastTime = now; phase += dt;
     if (getPeer() != lastPeer || now - lastRendererCheckMs > 1000.0) { lastRendererCheckMs = now; useSoftwareRenderer(); }
+    if (now - lastGlowReadMs > 3000.0)       // clic droit > Glow intensity : commun a toutes les fenetres (jamais dans paint)
+    {
+        lastGlowReadMs = now;
+        const int pc = NineHandsGlow::percent (JucePlugin_Name);
+        if (pc != glowPc) setGlowPercent (pc);
+    }
+    hostLock.track (*this);
 
     if (resizeSettle > 0 && --resizeSettle == 0) rebuildCaches();
     else if (resizeSettle == 0 && now - lastScaleCheckMs > 250.0)
@@ -664,8 +674,9 @@ void NgateAudioProcessorEditor::drawLeds (Graphics& g)
     auto one = [&] (Point<float> c, float level, const Image& glowImg, Rectangle<float> glowRect, const Image& lens)
     {
         if (level <= 0.003f) return;
-        g.setOpacity (level);
+        g.setOpacity (level * glowAmt());                          // halo : clic droit > Glow intensity
         if (glowImg.isValid()) g.drawImage (glowImg, glowRect);
+        g.setOpacity (level);                                      // lentille : toujours pleine
         const float hs = layout::ledS * 0.5f;
         if (lens.isValid()) g.drawImage (lens, { c.x - hs, c.y - hs, hs * 2.0f, hs * 2.0f });
         g.setOpacity (1.0f);
@@ -836,10 +847,15 @@ void NgateAudioProcessorEditor::showPresetMenu()
         });
 }
 
-void NgateAudioProcessorEditor::showContextMenu (int learnIdx)
+void NgateAudioProcessorEditor::setGlowPercent (int pc)
+{
+    glowPc = NineHandsGlow::sanitize (pc);
+    drawnOpen = drawnGate = -1.0f;          // le timer redessine les LED
+}
+
+PopupMenu NgateAudioProcessorEditor::buildContextMenu (int learnIdx)
 {
     using namespace NineHandsMenu;
-    auto raw = [this] (const char* id) { return proc.apvts.getRawParameterValue (id)->load(); };
     PopupMenu menu;
     menu.setLookAndFeel (&menuLnf);
     auto ccText = [this] (int i)
@@ -850,54 +866,34 @@ void NgateAudioProcessorEditor::showContextMenu (int learnIdx)
     const int lt = proc.learnTarget.load();
     if (learnIdx >= 0)
     {
-        const String name = NgateAudioProcessor::learnDef (learnIdx).name;
-        const int ico = learnIdx == 0 ? icoKnob : (learnIdx >= 4 ? icoPedal : icoSwitch);
-        addHeader (menu, menuLnf.f, ico, accent, name, "MIDI: " + ccText (learnIdx));
+        // menu d'une commande (tronc commun) : en-tete, MIDI Learn, Clear MIDI, Cancel MIDI learn
+        const int i = learnIdx;
+        const String name = NgateAudioProcessor::learnDef (i).name;
+        addHeader (menu, menuLnf.f, (learnIdx == 0 ? icoKnob : (learnIdx >= 4 ? icoPedal : icoSwitch)), accent, name, "MIDI: " + ccText (learnIdx));
         menu.addItem (1000 + learnIdx, "MIDI Learn: " + name, true, lt == learnIdx);
         menu.addItem (1100 + learnIdx, "Clear MIDI: " + name, proc.ccMap[learnIdx].load() >= 0);
-        if (learnIdx == 4)
-        {
-            menu.addItem (1000 + 5, "MIDI Learn: Footswitch toggle (each press)", true, lt == 5);
-            menu.addItem (1100 + 5, "Clear MIDI: Footswitch toggle", proc.ccMap[5].load() >= 0);
-        }
-        if (lt >= 0) menu.addItem (1200, "Cancel MIDI learn");
-        menu.addSeparator();
+        menu.addItem (1200, "Cancel MIDI learn", lt >= 0);
+        return menu;
     }
-    else
-        addHeader (menu, menuLnf.f, icoPedal, accent, "Ngate", "Noise gate  v" + String (JucePlugin_VersionString));
 
-    PopupMenu sizes;
-    {
-        const char* names[numSizes] = { "60 %", "75 %", "100 %" };
-        const int def = WigaWindowSize::defaultIndex (JucePlugin_Name, numSizes);
-        PopupMenu defSizes;
-        for (int i = 0; i < numSizes; ++i)
-        {
-            sizes.addItem (1 + i, String (names[i]) + (i == def ? "  (default)" : ""), true, std::abs (getHeight() - sizeHeight (i)) <= 2);
-            defSizes.addItem (20 + i, names[i], true, i == def);
-        }
-        sizes.addSeparator();
-        sizes.addSubMenu ("Default size (new windows)", defSizes);
-    }
-    menu.addSubMenu ("Plugin size", sizes);
-    menu.addSeparator();
-
+    // menu de la pedale (tronc commun) : presets, reglages propres, MIDI, Plugin size, Glow intensity
+    addHeader (menu, menuLnf.f, icoPedal, accent, "Ngate", "Noise gate  v" + String (JucePlugin_VersionString));
     PopupMenu factory;
     for (int i = 0; i < NgateAudioProcessor::getNumFactoryPresets(); ++i)
         factory.addItem (100 + i, String (i + 1) + ". " + NgateAudioProcessor::getFactoryPreset (i).name, true, proc.currentPreset.load() == i);
     menu.addSubMenu ("Factory presets", factory);
     PopupMenu load, save;
     for (int slot = 1; slot <= 9; ++slot)
-    {
+    {{
         const bool exists = proc.hasUserPreset (slot);
         load.addItem (200 + slot, "User " + String (slot) + (exists ? "" : "  (empty)"), exists, proc.currentPreset.load() == 100 + slot);
         save.addItem (300 + slot, "User " + String (slot) + (exists ? "  (overwrite)" : ""));
-    }
+    }}
     menu.addSubMenu ("Load user preset", load);
     menu.addSubMenu ("Save user preset", save);
     menu.addSeparator();
-
-    menu.addItem (40, proc.learning.load() ? "Cancel LEARN" : "LEARN noise floor (1.5 s)");
+    auto raw = [this] (const char* id) { return proc.apvts.getRawParameterValue (id)->load(); };
+    menu.addItem (40, proc.learning.load() ? "Cancel noise floor learn" : "Learn noise floor");
     PopupMenu gate;
     gate.addItem (41, "Soft (natural decay)", true, raw ("hard") < 0.5f);
     gate.addItem (42, "Hard (tight, fast)",   true, raw ("hard") > 0.5f);
@@ -910,28 +906,52 @@ void NgateAudioProcessorEditor::showContextMenu (int learnIdx)
     gate.addItem (46, "-40 dB (keeps a breath)", true, roundToInt (raw ("range")) == 1);
     gate.addItem (47, "-20 dB (gentle)",         true, roundToInt (raw ("range")) == 2);
     menu.addSubMenu ("Gate settings", gate);
+    menu.addSeparator();
 
     PopupMenu midi;
     midi.addSectionHeader ("MIDI Learn");
     for (int i = 0; i < NgateAudioProcessor::numLearn; ++i)
         midi.addItem (1000 + i, "Learn: " + String (NgateAudioProcessor::learnDef (i).name) + "  (" + ccText (i) + ")", true, lt == i);
     midi.addSeparator();
-    if (lt >= 0) midi.addItem (1200, "Cancel MIDI learn");
+    midi.addItem (1200, "Cancel MIDI learn", lt >= 0);
     midi.addItem (1201, "Clear all MIDI assignments");
     midi.addSeparator();
-    midi.addItem (911, "Program Change 1-" + String (NgateAudioProcessor::getNumFactoryPresets()) + "  Factory presets", false);
+    NineHandsWindow::addMidiFootswitchMode (midi, ! proc.midiFsMomentary.load());
+    midi.addSeparator();
+    NineHandsWindow::addProgramChangeInfo (midi);
     menu.addSubMenu ("MIDI", midi);
     menu.addSeparator();
-    menu.addItem (999, "Ngate v" + String (JucePlugin_VersionString) + "  NINE HANDS | DSP", false);
 
-    menu.showMenuAsync (PopupMenu::Options().withMousePosition(),       // toujours la ou l'on clique
+    const char* names[numSizes] = { "60 %", "75 %", "100 %" };
+    const int heights[numSizes] = { sizeHeight (0), sizeHeight (1), sizeHeight (2) };
+    menu.addSubMenu ("Plugin size", NineHandsWindow::sizeMenu (JucePlugin_Name, numSizes, names, heights, getHeight()));
+    menu.addSubMenu ("Glow intensity", NineHandsWindow::glowMenu (glowPc));
+    return menu;
+}
+
+void NgateAudioProcessorEditor::showContextMenu (int learnIdx)
+{
+    auto menu = buildContextMenu (learnIdx);
+    menu.showMenuAsync (PopupMenu::Options().withMousePosition(),       // menu clic droit : toujours la ou l'on clique
         [safe = Component::SafePointer<NgateAudioProcessorEditor> (this)] (int r)
         {
             if (safe == nullptr || r == 0) return;
             auto& ed = *safe;
             auto& pr = ed.proc;
-            if      (r >= 1 && r < 1 + numSizes) ed.setScaledHeight (sizeHeight (r - 1));
-            else if (r >= 20 && r < 20 + numSizes) { WigaWindowSize::setDefaultIndex (JucePlugin_Name, r - 20); ed.setScaledHeight (sizeHeight (r - 20)); }
+            int inst = pr.uiSizeIdx.load();
+            const int sz = NineHandsWindow::handleSize (r, JucePlugin_Name, numSizes, inst);
+            if (sz >= 0) { pr.uiSizeIdx = inst; ed.setScaledHeight (sizeHeight (sz)); return; }
+            if (const int pc = NineHandsWindow::handleGlow (r, JucePlugin_Name))
+            {
+                ed.setGlowPercent (pc);
+                ed.learnLine = "Glow  " + String (pc) + " %";        // ligne d'etat, brievement
+                ed.learnLineUntil = Time::getMillisecondCounterHiRes() + 1500.0;
+                ed.statusUntil = jmax (ed.statusUntil, ed.learnLineUntil);
+                return;
+            }
+            if (false) {}
+            else if (r == NineHandsWindow::idLatch)     pr.midiFsMomentary = false;
+            else if (r == NineHandsWindow::idMomentary) pr.midiFsMomentary = true;
             else if (r == 40) { if (pr.learning.load()) pr.cancelLearn(); else pr.startLearn(); }
             else if (r == 41 || r == 42) { ed.setParamValue ("hard", r == 42 ? 1.0f : 0.0f); pr.currentPreset = -1; }
             else if (r == 43 || r == 44) { ed.setParamValue ("bass", r == 44 ? 1.0f : 0.0f); pr.currentPreset = -1; }
@@ -939,10 +959,11 @@ void NgateAudioProcessorEditor::showContextMenu (int learnIdx)
             else if (r >= 100 && r < 200) pr.applyFactoryPreset (r - 100);
             else if (r > 200 && r < 300)  pr.loadUserPreset (r - 200);
             else if (r > 300 && r < 400)  pr.saveUserPreset (r - 300);
-            else if (r >= 1000 && r < 1000 + NgateAudioProcessor::numLearn) pr.learnTarget.store (r - 1000);
-            else if (r >= 1100 && r < 1100 + NgateAudioProcessor::numLearn) pr.ccMap[r - 1100].store (-1);
-            else if (r == 1200) pr.learnTarget.store (-1);
-            else if (r == 1201) { pr.learnTarget.store (-1); pr.resetMidiMap(); }
+            else if (r >= 1000) { if      (r >= 1000 && r < 1000 + NgateAudioProcessor::numLearn) pr.learnTarget.store (r - 1000);
+                                else if (r >= 1100 && r < 1100 + NgateAudioProcessor::numLearn) pr.ccMap[r - 1100].store (-1);
+                                else if (r == 1200) pr.learnTarget.store (-1);
+                                else if (r == 1201) { pr.learnTarget.store (-1); pr.resetMidiMap(); }
+                                ed.showStatus(); return; }
             ed.showStatus();
         });
 }

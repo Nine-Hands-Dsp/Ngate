@@ -226,7 +226,8 @@ void NgateAudioProcessor::handleMidi (juce::MidiBuffer& midi)
                         currentPreset = -1;
                         break;
                     case learnFootswitch:
-                        setParamFromAudio ("active", v >= 64 ? 1.0f : 0.0f);
+                        if (! midiFsMomentary.load (std::memory_order_relaxed)) setParamFromAudio ("active", v >= 64 ? 1.0f : 0.0f);   // latching
+                        else if (v >= 64 && prevCC[j] < 64) setParamFromAudio ("active", queuedOrCurrent ("active", pActive) > 0.5f ? 0.0f : 1.0f);
                         break;
                     case learnTrigger:
                         if (v >= 64 && prevCC[j] < 64)
@@ -523,6 +524,8 @@ void NgateAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     state.setProperty ("currentPreset", currentPreset.load(), nullptr);
+    state.setProperty ("uiSize", uiSizeIdx.load(), nullptr);
+    state.setProperty ("midiFsMomentary", midiFsMomentary.load(), nullptr);
     for (int i = 0; i < numLearn; ++i)
         state.setProperty (juce::String ("cc_") + learnKey[i], ccMap[i].load(), nullptr);
     if (auto xml = state.createXml())
@@ -537,6 +540,8 @@ void NgateAudioProcessor::setStateInformation (const void* data, int sizeInBytes
         {
             auto state = juce::ValueTree::fromXml (*xml);
             currentPreset = (int) state.getProperty ("currentPreset", 0);
+            uiSizeIdx = juce::jlimit (-1, 2, (int) state.getProperty ("uiSize", -1));
+            midiFsMomentary = (bool) state.getProperty ("midiFsMomentary", false);
             // assignations MIDI Learn (ancien projet sans ces proprietes : non assignees)
             bool factory = true;
             for (int i = 0; i < numLearn; ++i)

@@ -4,6 +4,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Layout.h"
 #include "NineHandsMenu.h"
+#include "NineHandsWindow.h"
 
 //==============================================================================
 // NGATE v2 (NINE HANDS | DSP) : visuel photo plein cadre (1206 x 1800 px), repere du plugin = image / 2.
@@ -114,6 +115,13 @@ private:
     void useSoftwareRenderer();
     void visibilityChanged() override;
     void askRepaint (juce::Rectangle<int> r);
+public:
+    juce::PopupMenu buildContextMenu (int learnIdx = -1);   // menu clic droit (aussi pour l'outil de controle des menus)
+    void setGlowPercent (int pc);                            // clic droit > Glow intensity
+private:
+    int glowPc = 100;                      // clic droit > Glow intensity : lumiere des LED sur la facade (25 a 100 %)
+    double lastGlowReadMs = 0.0;
+    float glowAmt() const { return (float) glowPc / 100.0f; }
     void showContextMenu (int learnIdx);
     void showPresetMenu();
     void stepPreset (int delta);
@@ -136,6 +144,7 @@ private:
 
     NgateAudioProcessor& proc;
     NineHandsMenu::MenuLnf menuLnf;
+    NineHandsWindow::HostLock hostLock;    // fenetre du DAW : jamais sous 60 %, jamais au-dela de 150 %
     RightClickForwarder rightClickFwd;
 
     juce::Image background, bgScaled, printLayer, glowG, glowO, ledG, ledO;
